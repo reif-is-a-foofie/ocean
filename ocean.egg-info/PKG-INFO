@@ -12,256 +12,215 @@ Requires-Dist: uvicorn>=0.30.0
 Requires-Dist: pytest>=8.2.0
 Requires-Dist: httpx>=0.27.0
 
-# OCEAN PRD (Codex + Cursor Version)
+# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
 
-## Name & Expansion
+OCEAN (OCEAN Creates Ex And Nihilo) is a **CLI/TUI multi-agent orchestrator** that spins up a software engineering team on demand.
 
-**OCEAN = OCEAN Creates Ex And Nihilo**
+## 🚀 Quick Start
+
+### 1. Setup Environment
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+```
+
+### 2. Install Globally (Optional)
+```bash
+# Create global symlink (requires sudo)
+sudo ln -sf "$(pwd)/ocean" /usr/local/bin/ocean
+```
+
+### 3. Run OCEAN
+```bash
+# Start the full interactive experience
+ocean
+
+# Or run specific commands:
+ocean --help          # Show all commands
+ocean clarify         # Project clarification with Moroni
+ocean crew            # Meet the OCEAN crew
+ocean test            # Run tests
+```
+
+## 🎯 What OCEAN Does
+
+OCEAN is a **terminal-based orchestrator** that:
+
+1. **🤖 Clarifies your vision** - Moroni asks questions to understand your project
+2. **👥 Assembles your team** - Spins up specialized AI agents (Q, Edna, Mario)
+3. **📋 Creates your plan** - Generates project backlog and execution plan
+4. **🚀 Scaffolds your project** - Creates initial project structure and files
+
+**No web servers, no APIs, no browsers needed** - everything happens in your terminal!
+
+## 🔧 Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `ocean` | **Main experience** - Full interactive flow (clarify → crew → plan) |
+| `ocean clarify` | Project clarification with Moroni (Architect) |
+| `ocean crew` | Meet the OCEAN crew and see their specialties |
+| `ocean init` | Generate/refresh project scaffolds |
+| `ocean test` | Run the test suite |
+| `ocean deploy` | Show deployment plan (dry-run) |
+
+## 🤖 The OCEAN Crew
+
+OCEAN spins up a **Codex-powered software engineering team** with specialized agents:
+
+### **Moroni** — Architect & Brain
+- **Role:** Clarifies vision, orchestrates the team, creates project specifications
+- **Capabilities:** Project planning, milestone definition, coordination
+- **Deliverables:** Project specs, coordination plans, architectural decisions
+
+### **Q** — Backend Engineer
+- **Role:** Builds APIs, services, data models, and backend infrastructure
+- **Capabilities:** FastAPI development, database design, API integration
+- **Deliverables:** Backend services, data models, API endpoints
+
+### **Edna** — Designer & UI/UX Engineer
+- **Role:** Creates user interfaces, design systems, and user experience flows
+- **Capabilities:** UI design, CSS/HTML, design tokens, user flows
+- **Deliverables:** Frontend interfaces, design systems, user experience
+
+### **Mario** — DevOps Engineer
+- **Role:** Handles deployment, CI/CD, infrastructure, and cloud platforms
+- **Capabilities:** Docker, CI/CD pipelines, cloud deployment, monitoring
+- **Deliverables:** Deployment configs, CI workflows, live applications
+
+## 🌟 CLI/TUI Features
+
+### **Rich Terminal Experience**
+- **Beautiful tables** - Project summaries, crew info, backlog display
+- **Progress indicators** - Visual feedback during operations
+- **Color-coded output** - Easy to read and navigate
+- **Interactive prompts** - Guided project clarification
+
+### **Session Management**
+- **Automatic logging** - Every session saved to timestamped log files
+- **Project persistence** - Saves and loads project specifications
+- **Audit trail** - Track all agent interactions and decisions
+
+### **Project Scaffolding**
+- **Backend templates** - FastAPI, tests, CI workflows
+- **Frontend placeholders** - HTML, CSS, design tokens
+- **DevOps configs** - Docker, deployment, monitoring
+- **Documentation** - Project specs, plans, backlogs
+
+## 🏗️ Project Structure
+
+```
+ocean/
+├── ocean/              # CLI application (core)
+│   ├── cli.py         # Command interface
+│   ├── agents.py      # Agent definitions
+│   ├── models.py      # Data models
+│   └── planner.py     # Task planning
+├── docs/              # Documentation & specs
+├── logs/              # Session logs
+├── backend/           # Generated backend scaffolds
+├── ui/                # Generated frontend scaffolds
+├── devops/            # Generated deployment configs
+├── tests/             # Generated test suites
+├── .github/           # Generated CI/CD workflows
+├── pyproject.toml     # Package configuration
+└── .cursorrules       # Development rules
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+ocean test
+
+# Run specific test suites
+pytest tests/
+```
+
+## 🚀 Deployment
+
+### Show Deployment Plan
+```bash
+# Preview deployment steps
+ocean deploy --dry-run
+
+# Execute deployment (when implemented)
+ocean deploy --no-dry-run
+```
+
+## 🔄 Development Workflow
+
+1. **Start OCEAN:** `ocean` (interactive flow)
+2. **Clarify vision:** Answer Moroni's questions
+3. **Meet the crew:** See your AI team
+4. **Get your plan:** Review backlog and tasks
+5. **Generate scaffolds:** `ocean init` to create project files
+6. **Iterate:** Run `ocean` again to refine
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Command not found:**
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate
+pip install -e .
+```
+
+**Tests failing:**
+```bash
+# Check dependencies
+pip install -e .
+# Run specific test
+pytest tests/ -v
+```
+
+**No project spec:**
+```bash
+# Run clarification first
+ocean clarify
+```
+
+## 📚 Next Steps
+
+- [ ] Add more agent capabilities
+- [ ] Implement task execution
+- [ ] Add database persistence
+- [ ] Deploy to cloud platform
+- [ ] Add authentication and user management
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `ocean test`
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
 
 ---
 
-## Vision
-
-Ocean is a **CLI/TUI multi-agent orchestrator** that spins up a Codex-powered software engineering team on demand.
-
-* You invoke it simply with `ocean`.
-* It asks clarifying questions (via Moroni, the architect/brain) until the project vision is understood.
-* Then it spins up the predefined crew:
-
-  * **Moroni** — Architect/Brain. Clarifies vision, orchestrates.
-  * **Q** — Backend/tools engineer. Knows APIs, data, services.
-  * **Edna** — Designer/UI/UX. Produces mockups, CSS, flows.
-  * **Mario** — DevOps. Knows hosting (Railway, Vercel, Render, etc.), CI/CD, deploys final product.
-
-The crew works together in visible chat logs inside the CLI/TUI.
-
-Ocean inherits the **Codex CLI** for natural language, MCP-based execution, and context management. Cursor consumes this PRD + rules to implement the system.
-
----
-
-## Guiding Principles
-
-1. **One word, one entrypoint** — just `ocean`.
-2. **Crew-based orchestration** — no abstract PM software; it’s a “team that codes.”
-3. **Agile deliverables** — every milestone produces something the user can actually use/test.
-4. **Immutability** — logs, repos, and agent conversations are preserved.
-5. **Transparency** — user can see every conversation between agents.
-
----
-
-## Core Flow
-
-1. User runs `ocean` (no args).
-2. Moroni greets user, asks clarifying questions about what’s being built (no hardcoded prompts — natural Codex context).
-3. Once vision is clear enough (e.g., “Web app,” “API service,” “CLI”), Moroni spins up the crew.
-4. Q, Edna, and Mario each propose and execute tasks.
-5. Deliverables are committed locally in a `repo/` folder.
-6. Mario deploys — end result is a live, usable instance.
-
----
-
-## Agent Context
-
-* **Moroni (Architect)**
-
-  * Access: project PRD, user clarifications, repo structure.
-  * Role: split project into milestones, assign work to Q, Edna, Mario.
-  * Interface: chat-first in Codex CLI.
-
-* **Q (Backend Engineer)**
-
-  * Access: GitHub context, API docs, open-source libraries.
-  * Role: build backend services, data models, integrations.
-  * Deliverables: code in `backend/`.
-
-* **Edna (Designer)**
-
-  * Access: Figma/HTML/CSS boilerplates, open-source design systems.
-  * Role: build UI flows, mockups, frontend styling.
-  * Deliverables: `ui/` code, `design.md`.
-
-* **Mario (DevOps)**
-
-  * Access: deployment platforms (Railway, Render, Vercel).
-  * Role: provision infra, set up CI/CD, deploy working app.
-  * Deliverables: `.github/workflows/`, `Dockerfile`, live URL.
-
----
-
-## Technical Setup
-
-* **Codex CLI** provides MCP interface for each agent.
-* **CrewAI** (or similar orchestration lib) coordinates task assignment, conversation passing, and repo commits.
-* **Repo structure** is generated automatically:
-
-  * `/backend`
-  * `/ui`
-  * `/devops`
-  * `/docs`
-* **Chat logs** saved into `/logs`.
-
----
-
-## Milestones (Agile, Deliverables to User Each Step)
-
-### M1 — Bootstrapping Ocean
-
-* Implement `ocean` CLI entrypoint (Typer or Click).
-* Print welcome banner:
-
-  ```
-  🌊 Welcome to OCEAN  
-  (OCEAN = OCEAN Creates Ex And Nihilo)  
-  ```
-* Enter Codex chat loop (interactive Q\&A with Moroni).
-* **Deliverable:** User runs `ocean` and gets interactive conversation.
-
-### M2 — Vision Clarification
-
-* Moroni (via Codex) asks clarifying questions.
-* Understands if project is server, app, CLI, etc.
-* Stores clarified project spec in `/docs/project.json`.
-* **Deliverable:** User exits clarification with a saved project spec.
-
-### M3 — Crew Spin-Up
-
-* Instantiate Moroni, Q, Edna, Mario as Codex MCP agents.
-* Each agent introduces itself in chat.
-* Agents receive project.json context.
-* **Deliverable:** Visible crew chat log confirming readiness.
-
-### M4 — First Sprint
-
-* Moroni assigns first atomic milestone.
-* Q codes backend stub.
-* Edna generates UI scaffold.
-* Mario sets up CI pipeline.
-* **Deliverable:** Repo initialized with working Hello World project scaffold.
-
-### M5 — Iteration & Testing
-
-* User can run `ocean test`.
-* Crew executes milestone tasks → updates repo.
-* Codex applies diffs automatically.
-* **Deliverable:** Usable prototype in local repo.
-
-### M6 — Deployment
-
-* Mario provisions hosting (Railway/Render).
-* Deploys app.
-* **Deliverable:** Live URL printed in terminal.
-
----
-
-## Definition of Done
-
-* `ocean` runs as a single command.
-* Moroni clarifies vision until project spec is saved.
-* Crew (Q, Edna, Mario) executes in visible chat log.
-* Repo scaffold created and updated iteratively.
-* CI/CD and deployment live.
-* Final result: a **user-accessible deployed app**.
-
----
-
-## CursorRules (Expansion)
-
-This repo is prepared for Cursor to implement OCEAN in small, verifiable steps. See `.cursorrules` for the full, actionable breakdown. Summary below.
-
-### Repository Conventions
-
-- Single entrypoint: `ocean` (no args) runs the conversation (clarify → crew intros) and writes a single session log.
-- Python 3.11+, Typer for CLI (preferred)
-- Repo structure: `backend/`, `ui/`, `devops/`, `docs/`, `logs/`
-- Persist logs in `logs/` (append‑only, timestamped files)
-- Ask before network/deploy actions; provide dry‑run mode
-
-### Milestones (Atomic Units)
-
-#### M1 — Bootstrap CLI
-- Add `pyproject.toml` with console script `ocean` → `ocean.cli:entrypoint`.
-- Create `ocean/cli.py` and print banner.
-- Implement `--help` and `--version`.
-- Ensure folders exist: `backend/`, `ui/`, `devops/`, `docs/`, `logs/`.
-- Log each run to a single `logs/session-*.log` per invocation.
-
-Tests:
-- `tests/test_cli_chat.py::test_entrypoint_runs_help_when_args_present` ensures CLI help works.
-
-Acceptance: run `ocean`; banner prints; log file created.
-
-#### M2 — Vision Clarification
-- `ocean clarify` prompts for project info (3–7 Qs).
-- Normalize to `docs/project.json` with basic schema.
-- Append summary to latest log.
-
-Acceptance: `docs/project.json` exists and contains user answers.
-
-Tests:
-- Extend CLI test to verify `docs/project.json` is created when prompts are answered.
-
-#### M3 — Crew Spin‑Up
-- Add `ocean/agents.py` with Moroni, Q, Edna, Mario classes.
-- `ocean crew` prints `introduce()` lines and logs them.
-- Default flow runs crew intros after clarification.
-
-Acceptance: `ocean crew` prints four agent intros and logs them.
-
-Tests:
-- Verify agent intros appear in `ocean chat` output and in the session log.
-
-#### M3.5 — Initial Plan & Backlog
-- Aggregate agent proposals into a backlog.
-- Persist `docs/backlog.json` and `docs/plan.md`.
-- Run automatically after crew intros in the default flow.
-
-Acceptance: running `ocean` creates `docs/backlog.json` and `docs/plan.md`.
-
-Tests:
-- `tests/test_planner.py` ensures backlog and plan files are created and valid.
-
-#### M4 — First Sprint Scaffolds
-- Backend: `backend/app.py` with FastAPI `/healthz`.
-- UI: minimal `ui/index.html` (or Vite+React if desired).
-- DevOps: `.github/workflows/ci.yml` running backend tests and simple UI build.
-- Docs: `docs/first_sprint.md` with run instructions.
-- `ocean init` generates/refreshes scaffolds idempotently.
-
-Acceptance: run `uvicorn backend.app:app --reload`; `GET /healthz` returns `{ "ok": true }`.
-
-Tests:
-- `backend/tests/test_healthz.py` exercises the endpoint.
-- `ui/styleguide.html` generated from design tokens.
-
-#### M5 — Iteration & Testing
-- Add `backend/tests/test_healthz.py`.
-- `ocean test` runs pytest and logs results.
-- `ocean run` starts backend (and optional static UI server).
-
-Acceptance: `ocean test` passes; results logged.
-
-Tests:
-- Pytest discovers both `tests/` and `backend/tests/`.
-
-#### M6 — Deployment Stubs
-- Add `Dockerfile` and `.dockerignore` for backend.
-- Add `devops/railway.json` or `devops/render.yaml` (placeholders with TODOs).
-- `ocean deploy --dry-run` prints expected steps; no network changes by default.
-- `docs/deploy.md` describes manual deploy.
-
-Acceptance: `ocean deploy --dry-run` prints a plan without side effects.
-
-Tests:
-- Optional: smoke check that `deploy --dry-run` prints expected steps.
-
-### Agent Interfaces
-
-- Moroni: architect; planning bullets and coordination.
-- Q: backend; proposes FastAPI `/healthz` + pytest task.
-- Edna: designer; ships minimal UI, baked-in design methodology and tokens; generates `ui/styleguide.html`; optionally uses V0 CLI if present.
-- Mario: devops; CI, Dockerfile, Render dry-run plan; optional `docker-compose.yml` and `.env.example` for local dev.
-
-### Quality Bars
-- Commands offer `--help` with 1–3 examples.
-- Idempotent behavior; safe re‑runs.
-- Clear, concise terminal feedback on changes.
+## 🔄 Recent Transformation
+
+OCEAN has been **transformed from a web application back to its intended purpose**: a powerful CLI/TUI multi-agent orchestrator. 
+
+**What was removed:**
+- ❌ Web servers and APIs
+- ❌ Browser-based UI
+- ❌ Docker containers
+- ❌ Complex deployment configs
+
+**What remains:**
+- ✅ **Rich CLI/TUI experience** with beautiful tables and progress bars
+- ✅ **Multi-agent orchestration** - Moroni, Q, Edna, Mario
+- ✅ **Project scaffolding** and planning
+- ✅ **Session logging** and persistence
+- ✅ **Clean, focused architecture**
+
+OCEAN is now **exactly what it was meant to be**: a terminal-based orchestrator that spins up your AI-powered software engineering team! 🎯 

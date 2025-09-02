@@ -1,12 +1,12 @@
 {
-  "name": "Demo",
+  "name": "dyno game",
   "kind": "web",
-  "description": "Demo app",
+  "description": "it is a clone of the chrome dyno trex infinite jumping game, on the web",
   "goals": [
-    "ship"
+    "ship something quickly"
   ],
   "constraints": [
-    "none"
+    "just run it on localhost"
   ],
-  "createdAt": "2025-09-02T14:07:57.189923"
+  "createdAt": "2025-09-02T17:11:58.887249"
 }

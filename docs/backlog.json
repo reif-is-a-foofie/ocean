@@ -1,24 +1,35 @@
 [
   {
-    "title": "Create health endpoint",
-    "description": "Implement /healthz in FastAPI and a smoke test",
-    "owner": "Q",
+    "title": "Design web application architecture",
+    "description": "Create frontend/backend architecture and data flow",
+    "owner": "Moroni",
     "files_touched": [
-      "backend/app.py",
-      "backend/tests/test_healthz.py"
+      "docs/architecture.md",
+      "docs/api_design.md"
     ]
   },
   {
-    "title": "Create minimal UI placeholder",
-    "description": "Generate ui/index.html with skeleton styles",
+    "title": "Create web backend",
+    "description": "Implement FastAPI backend with endpoints",
+    "owner": "Q",
+    "files_touched": [
+      "backend/app.py",
+      "backend/models.py"
+    ]
+  },
+  {
+    "title": "Create web interface design",
+    "description": "Design web-based user interface and user experience",
     "owner": "Edna",
     "files_touched": [
-      "ui/index.html"
+      "ui/index.html",
+      "ui/styles.css",
+      "docs/design_system.md"
     ]
   },
   {
     "title": "Add CI workflow",
-    "description": "Run pytest on push via GitHub Actions",
+    "description": "Set up automated testing and quality checks",
     "owner": "Mario",
     "files_touched": [
       ".github/workflows/ci.yml"
@@ -26,7 +37,7 @@
   },
   {
     "title": "Create Dockerfile",
-    "description": "Containerize backend with uvicorn",
+    "description": "Containerize application for deployment",
     "owner": "Mario",
     "files_touched": [
       "Dockerfile",
@@ -34,11 +45,11 @@
     ]
   },
   {
-    "title": "Render deploy plan",
-    "description": "Add devops/render.yaml and a dry-run plan",
+    "title": "Create deployment config",
+    "description": "Set up deployment configuration for cloud platforms",
     "owner": "Mario",
     "files_touched": [
-      "devops/render.yaml"
+      "devops/deploy.yaml"
     ]
   }
 ]

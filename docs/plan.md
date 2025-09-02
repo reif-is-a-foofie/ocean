@@ -2,8 +2,9 @@
 
 ## Backlog
 
-- [Q] Create health endpoint — backend/app.py, backend/tests/test_healthz.py
-- [Edna] Create minimal UI placeholder — ui/index.html
+- [Moroni] Design web application architecture — docs/architecture.md, docs/api_design.md
+- [Q] Create web backend — backend/app.py, backend/models.py
+- [Edna] Create web interface design — ui/index.html, ui/styles.css, docs/design_system.md
 - [Mario] Add CI workflow — .github/workflows/ci.yml
 - [Mario] Create Dockerfile — Dockerfile, .dockerignore
-- [Mario] Render deploy plan — devops/render.yaml
+- [Mario] Create deployment config — devops/deploy.yaml

@@ -1,8 +1,12 @@
 .git
-__pycache__/
+__pycache__
 *.pyc
-logs/
-ui/
+*.pyo
+*.pyd
+.Python
+env
 venv/
 .env
-
+logs/
+tests/
+*.egg-info/

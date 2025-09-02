@@ -9,3 +9,5 @@ Q: Backend/tools engineer. Builds services, data models, integrations. (tools: F
 Edna: Designer/UI/UX. Produces mockups, CSS, flows. (tools: Design methodology, HTML/CSS)
 Mario: DevOps. Provision infra, CI/CD, deploys final product. (tools: GitHub Actions, Docker, Render (plan))
 [Moroni] Backlog created: /Users/reif/Documents/The Tauati's Life/not-secret-project-files/ocean/docs/backlog.json
+[2025-09-02 14:33:59] API: health_check
+[2025-09-02 14:33:59] API: project_info_requested

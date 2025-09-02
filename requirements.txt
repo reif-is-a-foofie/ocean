@@ -1,0 +1,6 @@
+# OCEAN Generated Dependencies
+fastapi[all]
+uvicorn[standard]
+pytest
+httpx
+python-multipart
