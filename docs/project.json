@@ -1,0 +1,12 @@
+{
+  "name": "Demo",
+  "kind": "web",
+  "description": "Demo app",
+  "goals": [
+    "ship"
+  ],
+  "constraints": [
+    "none"
+  ],
+  "createdAt": "2025-09-02T14:07:57.189923"
+}

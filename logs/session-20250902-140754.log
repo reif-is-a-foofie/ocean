@@ -1,0 +1,11 @@
+OCEAN session started
+2025-09-02T14:07:54.535531
+[Moroni] Clarification complete.
+{"name": "Test Project", "kind": "web", "description": "A test", "goals": ["ship"], "constraints": ["none"], "createdAt": "2025-09-02T14:07:54.535902"}
+[System] Crew spin-up for project:
+{"name": "Test Project", "kind": "web", "description": "A test", "goals": ["ship"], "constraints": ["none"], "createdAt": "2025-09-02T14:07:54.535902"}
+Moroni: Architect/Brain. Clarifies vision, orchestrates the team. (tools: planning)
+Q: Backend/tools engineer. Builds services, data models, integrations. (tools: FastAPI, pytest)
+Edna: Designer/UI/UX. Produces mockups, CSS, flows. (tools: Design methodology, HTML/CSS)
+Mario: DevOps. Provision infra, CI/CD, deploys final product. (tools: GitHub Actions, Docker, Render (plan))
+[Moroni] Backlog created: /Users/reif/Documents/The Tauati's Life/not-secret-project-files/ocean/docs/backlog.json

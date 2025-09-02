@@ -1,0 +1,238 @@
+# OCEAN Cursor Rules
+
+## Objective
+
+Implement OCEAN — a CLI/TUI multi‑agent orchestrator that spins up a Codex‑powered software engineering team on demand — as a series of small, verifiable milestones. Cursor should follow these atomic tasks, produce incremental deliverables, and persist all artifacts in the repository.
+
+## Global Guardrails
+
+- Single entrypoint: `ocean` (no args) runs the conversation (clarify → crew intros) and writes to a single session log.
+- Cross‑platform: macOS, Linux; Python 3.11+.
+- Keep changes minimal and focused per milestone; no unrelated refactors.
+- Never remove logs or user content; only append.
+- Confirm before network/deploy actions; print dry‑run steps when credentials missing.
+- Persist chat logs to `./logs/` as newline‑delimited text.
+- Follow repo structure: `backend/`, `ui/`, `devops/`, `docs/`, `logs/`.
+
+## Tech Preferences
+
+- Language: Python 3.11+
+- CLI: Typer (preferred) or Click
+- TUI/Output: Rich (optional, nice‑to‑have)
+- Orchestration: simple in‑repo classes; can later swap for CrewAI
+- Backend example: FastAPI (minimal)
+- Frontend example: Vite + React (or plain HTML placeholder)
+- Tests: pytest for Python; keep minimal
+
+## Deliverable Definition
+
+For each milestone below:
+- Output code to the specified paths.
+- Add concise usage notes to `docs/`.
+- Write logs under `logs/`, including agent messages where applicable.
+- Provide an acceptance check (a command and an expected outcome).
+
+## Agent Interfaces (for Cursor)
+
+- `ocean/models.py`
+  - `ProjectSpec`: normalized spec with `{ name, kind, description, goals[], constraints[], createdAt }`.
+  - `Task`: unit of work with `title, description, owner, files_touched[]`.
+  - `Message`: log line with `author, text, ts`.
+
+- `ocean/agents.py`
+  - `AgentBase`: `name, role, tools[]`; methods `introduce()`, `plan(ProjectSpec)->list[str]`, `propose_tasks(ProjectSpec)->list[Task]`, `execute(tasks)->list[Task]`.
+  - `Moroni`: architect; `plan()` returns coordination bullets.
+  - `Q`: backend; proposes FastAPI `/healthz` + pytest task.
+  - `Edna`: designer; includes design methodology and optional V0 CLI support.
+  - `Mario`: devops; proposes CI, Docker, and Render deploy plan tasks.
+
+- `ocean/tools/`
+  - `design_system.py`: `DESIGN_METHOD`, `DESIGN_TOKENS`.
+  - `v0_cli.py`: `V0Cli.is_available()`; Cursor may expand with real calls.
+  - `deploy.py`: `RenderDeployPlan.steps()` for dry-run plans.
+
+---
+
+## Milestone M1 — Bootstrap `ocean` CLI
+
+Goal: A runnable `ocean` command (no args) that prints a banner and enters the interactive conversation (clarify → crew intros) using a single session log.
+
+Atomic tasks:
+- Create Python package scaffold: `ocean/__init__.py`, `ocean/cli.py`.
+- Add `pyproject.toml` for packaging and console script `ocean` that calls `ocean.cli:entrypoint`.
+- Implement banner print with project expansion.
+- Add `ocean --version` and `ocean --help`.
+- Create folders if missing: `backend/`, `ui/`, `devops/`, `docs/`, `logs/`.
+- Log each run to `logs/session-YYYYMMDD-HHMMSS.log` (single file per `ocean` invocation).
+
+Files to generate/update:
+- `pyproject.toml`
+- `ocean/__init__.py`
+- `ocean/cli.py`
+- `logs/` (directory)
+- `backend/`, `ui/`, `devops/`, `docs/` (directories)
+
+Tests to add:
+- `tests/test_cli_chat.py::test_entrypoint_runs_help_when_args_present`
+
+Acceptance:
+- Command: `ocean`
+- Expect: banner is printed; placeholder prompt appears; a new log file is created.
+
+---
+
+## Milestone M2 — Vision Clarification (Moroni)
+
+Goal: Ask the user a short series of clarifying questions and persist a normalized project spec.
+
+Atomic tasks:
+- Add `ocean clarify` subcommand and integrate into default interactive flow.
+- Implement Moroni prompt sequence (3–7 questions): name, type (web/api/cli), primary goal, target users, must‑haves, nice‑to‑haves.
+- Normalize answers into `docs/project.json` with schema: `{ name, kind, description, goals[], constraints[], createdAt }`.
+- Validate JSON (basic type checks) and pretty‑print.
+- Append a summary to `logs/`.
+
+Files to generate/update:
+- `docs/project.json`
+- `logs/session-*.log`
+
+Tests to add:
+- Extend `tests/test_cli_chat.py::test_chat_non_interactive` to assert `docs/project.json` exists and is valid JSON.
+
+Acceptance:
+- Command: `ocean clarify` (or run `ocean` and complete prompts)
+- Expect: `docs/project.json` exists and contains user answers; log updated.
+
+---
+
+## Milestone M3 — Crew Spin‑Up
+
+Goal: Define agents (Moroni, Q, Edna, Mario) and record visible introductions to logs.
+
+Atomic tasks:
+- Add `ocean/agents.py` with classes: `Moroni`, `Q`, `Edna`, `Mario`.
+- Each class: `name`, `role`, `introduce()` returning a one‑line description.
+- Add `ocean crew` command that loads `docs/project.json`, prints agent intros, and writes them to the current log file.
+- Integrate into default flow: after clarification, run crew intros automatically.
+
+Files to generate/update:
+- `ocean/agents.py`
+- `logs/session-*.log`
+
+Tests to add:
+- Assert four agent intros appear in chat output and session log.
+
+### M3.5 — Initial Plan & Backlog
+
+Goal: Convert agent proposals into a persisted backlog and plan summary.
+
+Atomic tasks:
+- Add planner that aggregates `AgentBase.propose_tasks(ProjectSpec)`.
+- Write `docs/backlog.json` and `docs/plan.md` with owner and files.
+- Integrate into default `ocean` flow after crew intros.
+
+Files to generate/update:
+- `ocean/planner.py`
+- `docs/backlog.json`
+- `docs/plan.md`
+
+Tests to add:
+- `tests/test_planner.py` verifies backlog generation and files written.
+
+Acceptance:
+- Command: `ocean crew`
+- Expect: agent intros printed; appended to `logs/session-*.log`.
+
+---
+
+## Milestone M4 — First Sprint Scaffolds
+
+Goal: Produce working scaffolds for backend, UI, and CI skeleton.
+
+Atomic tasks:
+- Backend: create `backend/app.py` using FastAPI with a `/healthz` endpoint and `uvicorn` entry in `pyproject.toml` extras.
+- UI: create minimal `ui/` with `index.html` and a placeholder script (or Vite + React template if feasible).
+- DevOps: create `.github/workflows/ci.yml` running `pytest` for backend and a basic build step for UI (if present).
+- Docs: add `docs/first_sprint.md` explaining how to run backend (`uvicorn`) and open UI.
+- Update `ocean init` subcommand to generate or refresh scaffolds idempotently.
+
+Files to generate/update:
+- `backend/app.py`
+- `backend/tests/test_healthz.py`
+- `ui/index.html`
+- `ui/styleguide.html`
+- `.github/workflows/ci.yml`
+- `docs/first_sprint.md`
+
+Tests to add:
+- `backend/tests/test_healthz.py` exercising `/healthz` endpoint.
+
+Acceptance:
+- Commands: `ocean init` then `uvicorn backend.app:app --reload`
+- Expect: `GET /healthz` returns `{"ok": true}`; UI index renders locally from `ui/`.
+
+---
+
+## Milestone M5 — Iteration & Testing
+
+Goal: Enable local testing and a single command to run checks.
+
+Atomic tasks:
+- Add `backend/tests/test_healthz.py` with a simple FastAPI test.
+- Add `ocean test` to run backend tests via `pytest` and report summary.
+- Add `ocean run` to start backend (and optionally serve `ui/` statically via a simple HTTP server).
+- Ensure logs track test runs and outcomes.
+
+Files to generate/update:
+- `backend/tests/test_healthz.py`
+- `logs/session-*.log`
+
+Tests to add:
+- Keep CLI tests green; ensure `pytest` runs both `tests/` and `backend/tests/`.
+
+Acceptance:
+- Command: `ocean test`
+- Expect: tests pass and summary printed; logs updated.
+
+---
+
+## Milestone M6 — Deployment Stubs
+
+Goal: Provide a minimal, safe path to deploy with clear placeholders.
+
+Atomic tasks:
+- Add `Dockerfile` for backend and `.dockerignore`.
+- Add `devops/railway.json` or `devops/render.yaml` placeholders with TODOs.
+- Add `ocean deploy --dry-run` that prints deployment steps and checks env vars.
+- Document manual deploy steps in `docs/deploy.md`.
+
+Files to generate/update:
+- `Dockerfile`
+- `.dockerignore`
+- `devops/render.yaml` (or `devops/railway.json`)
+- `docs/deploy.md`
+
+Optional files:
+- `.env.example`
+- `docker-compose.yml`
+
+Tests to add:
+- None required (dry-run only); check string presence in `ocean deploy --dry-run` output.
+
+Acceptance:
+- Command: `ocean deploy --dry-run`
+- Expect: descriptive plan printed; no network calls without explicit flags.
+
+---
+
+## Non‑Goals (for now)
+
+- Full multi‑agent autonomous planning/execution.
+- External secret management and live platform provisioning without user config.
+- Complex UI framework scaffolding beyond minimal usable placeholders.
+
+## Quality Bars
+
+- Each command has `--help` with 1–3 clear examples.
+- Idempotent operations: re‑running commands should be safe and non‑destructive.
+- Clear user feedback: success/failure messages explain what changed and where.

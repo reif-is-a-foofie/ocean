@@ -1,0 +1,2 @@
+[console_scripts]
+ocean = ocean.cli:entrypoint

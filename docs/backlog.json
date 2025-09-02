@@ -1,0 +1,44 @@
+[
+  {
+    "title": "Create health endpoint",
+    "description": "Implement /healthz in FastAPI and a smoke test",
+    "owner": "Q",
+    "files_touched": [
+      "backend/app.py",
+      "backend/tests/test_healthz.py"
+    ]
+  },
+  {
+    "title": "Create minimal UI placeholder",
+    "description": "Generate ui/index.html with skeleton styles",
+    "owner": "Edna",
+    "files_touched": [
+      "ui/index.html"
+    ]
+  },
+  {
+    "title": "Add CI workflow",
+    "description": "Run pytest on push via GitHub Actions",
+    "owner": "Mario",
+    "files_touched": [
+      ".github/workflows/ci.yml"
+    ]
+  },
+  {
+    "title": "Create Dockerfile",
+    "description": "Containerize backend with uvicorn",
+    "owner": "Mario",
+    "files_touched": [
+      "Dockerfile",
+      ".dockerignore"
+    ]
+  },
+  {
+    "title": "Render deploy plan",
+    "description": "Add devops/render.yaml and a dry-run plan",
+    "owner": "Mario",
+    "files_touched": [
+      "devops/render.yaml"
+    ]
+  }
+]

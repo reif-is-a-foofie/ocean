@@ -1,3 +1,17 @@
+Metadata-Version: 2.4
+Name: ocean
+Version: 0.1.0
+Summary: OCEAN CLI/TUI multi-agent orchestrator
+Author: OCEAN Team
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: typer[all]>=0.9.0
+Requires-Dist: rich>=13.7.0
+Requires-Dist: fastapi>=0.111.0
+Requires-Dist: uvicorn>=0.30.0
+Requires-Dist: pytest>=8.2.0
+Requires-Dist: httpx>=0.27.0
+
 # OCEAN PRD (Codex + Cursor Version)
 
 ## Name & Expansion
