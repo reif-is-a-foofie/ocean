@@ -5,6 +5,7 @@ ocean/__init__.py
 ocean/agents.py
 ocean/cli.py
 ocean/mcp.py
+ocean/mcp_client.py
 ocean/models.py
 ocean/planner.py
 ocean.egg-info/PKG-INFO

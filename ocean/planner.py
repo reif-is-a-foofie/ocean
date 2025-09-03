@@ -25,37 +25,52 @@ def generate_backlog(spec: ProjectSpec) -> list[Task]:
 
 
 def execute_backlog(backlog: Iterable[Task], docs_dir: Path, spec: ProjectSpec) -> tuple[Path, Path, Optional[str]]:
-    """Execute the backlog using agent execution capabilities.
+    """Execute the backlog in phases and return paths and runtime URL summary.
 
-    Returns (backlog_json_path, plan_md_path, runtime_summary_if_any).
+    Phases:
+    1) Moroni (architecture)
+    2) Q and Edna (implementation/UI) in parallel
+    3) Mario (DevOps) last; may start local runtime
     """
+    from concurrent.futures import ThreadPoolExecutor, wait
+
     docs_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Group tasks by agent
-    agent_tasks = {}
-    for task in backlog:
-        if task.owner not in agent_tasks:
-            agent_tasks[task.owner] = []
-        agent_tasks[task.owner].append(task)
-    
-    # Execute tasks using each agent's execute method
+
     agents = {agent.name: agent for agent in default_agents()}
-    executed_tasks = []
+    executed_tasks: list[Task] = []
     runtime_summary: Optional[str] = None
-    
-    for agent_name, tasks in agent_tasks.items():
-        if agent_name in agents:
-            print(f"🤖 Executing {len(tasks)} tasks for {agent_name}...")
-            executed = agents[agent_name].execute(tasks, spec)
-            executed_tasks.extend(executed)
-            if agent_name == "Mario":
-                # best-effort fetch of runtime summary
-                summary = getattr(agents[agent_name], "last_runtime_summary", None)
-                if summary:
-                    runtime_summary = summary
-        else:
-            print(f"⚠️ Agent {agent_name} not found, skipping tasks")
-    
+
+    # Partition tasks by owner
+    moroni_tasks = [t for t in backlog if t.owner == "Moroni"]
+    q_tasks = [t for t in backlog if t.owner == "Q"]
+    edna_tasks = [t for t in backlog if t.owner == "Edna"]
+    mario_tasks = [t for t in backlog if t.owner == "Mario"]
+
+    # Phase 1: Moroni
+    if moroni_tasks:
+        print(f"🤖 Executing {len(moroni_tasks)} tasks for Moroni...")
+        executed_tasks.extend(agents["Moroni"].execute(moroni_tasks, spec))
+
+    # Phase 2: Q and Edna in parallel
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = []
+        if q_tasks:
+            print(f"🤖 Executing {len(q_tasks)} tasks for Q...")
+            futures.append(pool.submit(agents["Q"].execute, q_tasks, spec))
+        if edna_tasks:
+            print(f"🤖 Executing {len(edna_tasks)} tasks for Edna...")
+            futures.append(pool.submit(agents["Edna"].execute, edna_tasks, spec))
+        if futures:
+            done, _ = wait(futures)
+            for fut in done:
+                executed_tasks.extend(fut.result())
+
+    # Phase 3: Mario
+    if mario_tasks:
+        print(f"🤖 Executing {len(mario_tasks)} tasks for Mario...")
+        executed_tasks.extend(agents["Mario"].execute(mario_tasks, spec))
+        runtime_summary = getattr(agents["Mario"], "last_runtime_summary", None)
+
     # Write documentation
     bj, pm = write_backlog(executed_tasks, docs_dir)
     return bj, pm, runtime_summary

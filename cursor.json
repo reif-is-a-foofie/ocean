@@ -1,0 +1,44 @@
+{
+  "name": "Ocean",
+  "tagline": "OCEAN = OCEAN Creates Everything And (N)othing",
+  "entry": "ocean",
+  "agents": [
+    {
+      "id": "moroni",
+      "name": "Moroni",
+      "role": "Architect",
+      "responsibilities": ["interpret PRD", "decompose tasks", "accept/confirm/seal"],
+      "mcp": { "provider": "stub", "perAgent": true }
+    },
+    {
+      "id": "q",
+      "name": "Q",
+      "role": "Backend/Tools",
+      "responsibilities": ["backend code", "api", "tests"],
+      "mcp": { "provider": "stub", "perAgent": true }
+    },
+    {
+      "id": "edna",
+      "name": "Edna",
+      "role": "Designer",
+      "responsibilities": ["ui/ux", "html/css", "components"],
+      "mcp": { "provider": "stub", "perAgent": true }
+    },
+    {
+      "id": "mario",
+      "name": "Mario",
+      "role": "DevOps",
+      "responsibilities": ["ci/cd", "docker", "deploy"],
+      "mcp": { "provider": "stub", "perAgent": true }
+    }
+  ],
+  "primitives": ["publish", "accept", "action", "submit", "confirm", "seal"],
+  "milestones": [
+    "M1: TUI + PRD ingest",
+    "M2: Agents + MCP instances",
+    "M3: Task lifecycle",
+    "M4: Collaboration",
+    "M5: Provision + runtime",
+    "M6: Real MCP integration"
+  ]
+}

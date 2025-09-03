@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 from datetime import datetime
+import shutil
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -31,11 +33,32 @@ LOGS = ROOT / "logs"
 BACKEND = ROOT / "backend"
 UI = ROOT / "ui"
 DEVOPS = ROOT / "devops"
+PROJECTS = ROOT / "projects"
 
 
 def ensure_repo_structure() -> None:
-    for p in [DOCS, LOGS, BACKEND, UI, DEVOPS, ROOT / ".github" / "workflows"]:
+    for p in [DOCS, LOGS, BACKEND, UI, DEVOPS, PROJECTS, ROOT / ".github" / "workflows"]:
         p.mkdir(parents=True, exist_ok=True)
+
+
+def _create_venv(path: Path) -> None:
+    """Create a Python venv at path if missing and install basic deps.
+
+    - Installs editable package in root venv
+    - Installs FastAPI/uvicorn in workspace venvs for web/api kind
+    """
+    if not path.exists():
+        subprocess.run([sys.executable, "-m", "venv", str(path)], check=False)
+
+
+def _ensure_root_venv() -> None:
+    v = ROOT / "venv"
+    if not v.exists():
+        console.print("[dim]Creating project venv under ./venv…[/dim]")
+        _create_venv(v)
+        pip = v / "bin" / "pip"
+        if pip.exists():
+            subprocess.run([str(pip), "install", "-e", "."], check=False)
 
 
 def session_log_path() -> Path:
@@ -60,6 +83,18 @@ def banner() -> str:
     )
 
 
+def _slugify(name: str) -> str:
+    s = name.strip().lower()
+    out = []
+    for ch in s:
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in {" ", "-", "_"}:
+            out.append("-")
+    slug = "".join(out).strip("-")
+    return slug or "project"
+
+
 def _load_project_spec() -> Optional[dict]:
     path = DOCS / "project.json"
     if not path.exists():
@@ -74,6 +109,86 @@ def _save_project_spec(data: dict) -> Path:
     return out
 
 
+def _load_prd() -> Optional[str]:
+    p = DOCS / "prd.md"
+    if p.exists():
+        try:
+            return p.read_text(encoding="utf-8")
+        except Exception:
+            return None
+    return None
+
+
+def _parse_prd(prd_text: str) -> dict:
+    """Heuristically parse a PRD into a ProjectSpec-like dict.
+
+    - Title: first markdown heading or first non-empty line
+    - One-liner: next non-empty line/paragraph
+    - Kind: guess from keywords (web/api/cli)
+    - Goals/Constraints: look for sections or bullet lines
+    """
+    lines = [l.rstrip() for l in prd_text.splitlines()]
+    name = "My Project"
+    description = ""
+    kind = "web"
+    goals: list[str] = []
+    constraints: list[str] = []
+
+    # Title
+    for i, l in enumerate(lines):
+        if not l.strip():
+            continue
+        if l.startswith("#"):
+            name = l.lstrip("# ").strip() or name
+            start_idx = i + 1
+            break
+        else:
+            name = l.strip()
+            start_idx = i + 1
+            break
+    else:
+        start_idx = 0
+
+    # One-liner
+    for l in lines[start_idx:]:
+        if l.strip():
+            description = l.strip()
+            break
+
+    blob = prd_text.lower()
+    if any(k in blob for k in ["fastapi", "endpoint", "/healthz", "api"]):
+        kind = "api"
+    if any(k in blob for k in ["ui", "frontend", "web", "html", "css", "react", "vite"]):
+        kind = "web"
+    if any(k in blob for k in ["cli", "command line", "terminal"]):
+        kind = "cli"
+
+    # Collect goals/constraints from sections
+    current = None
+    for l in lines:
+        low = l.lower()
+        if low.startswith("## goals") or low.startswith("### goals"):
+            current = "goals"; continue
+        if low.startswith("## constraints") or low.startswith("### constraints"):
+            current = "constraints"; continue
+        if low.startswith("## "):
+            current = None
+        if l.strip().startswith("-") and current:
+            item = l.lstrip("- ").strip()
+            if current == "goals":
+                goals.append(item)
+            else:
+                constraints.append(item)
+
+    return {
+        "name": name,
+        "kind": kind,
+        "description": description,
+        "goals": goals,
+        "constraints": constraints,
+    }
+
+
 def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> str:
     """Robust prompt helper.
 
@@ -83,7 +198,7 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
     """
     import os as _os
 
-    if _os.getenv("OCEAN_TEST") == "1":
+    if _os.getenv("OCEAN_TEST") == "1" or not sys.stdin.isatty():
         return Prompt.ask(label, default=default, choices=choices)
 
     # Build label with choices hint if provided
@@ -104,7 +219,7 @@ def main(version: Optional[bool] = typer.Option(None, "--version", help="Show ve
 
 
 @app.command(help="Run the interactive flow: clarify → crew intros → planning")
-def chat():
+def chat(prd: Optional[str] = typer.Option(None, "--prd", help="Path to PRD file or '-' to read from stdin")):
     """Main interactive conversation flow"""
     ensure_repo_structure()
     
@@ -116,6 +231,28 @@ def chat():
     # Print banner and initialize Codex MCP
     console.print(banner())
     MCP.ensure_started(log)
+    # Ensure project-level venv for convenience
+    _ensure_root_venv()
+    status = MCP.status()
+    if (status.get("provider") != "codex-cli") and (os.getenv("OCEAN_MCP_ONLY", "1") not in ("0", "false", "False")):
+        console.print("[red]❌ MCP-only mode requires Codex CLI. Install via 'brew install codex' and run 'codex auth login'.[/red]")
+        raise typer.Exit(code=1)
+
+    # If PRD provided, persist to docs/prd.md
+    if prd:
+        prd_text = None
+        if prd == "-":
+            console.print("[bold blue]🌊 OCEAN:[/bold blue] Paste your PRD content. Press Ctrl-D (Ctrl-Z on Windows) when done.\n")
+            prd_text = sys.stdin.read()
+        else:
+            prd_path = Path(prd)
+            if prd_path.exists():
+                prd_text = prd_path.read_text(encoding="utf-8")
+            else:
+                console.print(f"[yellow]⚠️ PRD file not found: {prd_path}[/yellow]")
+        if prd_text:
+            (DOCS / "prd.md").write_text(prd_text, encoding="utf-8")
+            write_log(log, "[OCEAN] PRD saved to docs/prd.md", f"[OCEAN] PRD length: {len(prd_text)} chars")
     
     console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Hello! I'm OCEAN, your AI-powered software engineering orchestrator.")
     console.print("I'll help you build your project by coordinating with my specialized crew.")
@@ -146,26 +283,36 @@ def chat():
     console.print(f"📋 Project spec: [blue]docs/project.json[/blue]")
     console.print(f"📋 Backlog: [blue]docs/backlog.json[/blue]")
     console.print(f"📋 Plan: [blue]docs/plan.md[/blue]")
-    console.print(f"\n🌊 [bold blue]OCEAN:[/bold blue] Your AI engineering team is ready! Use 'ocean init' to generate the scaffolds.")
+    console.print(f"\n🌊 [bold blue]OCEAN:[/bold blue] Your AI engineering team is ready!")
+    console.print(f"💡 Tip: Use 'ocean provision' to create an isolated workspace under 'projects/'.")
 
 
 def _do_clarify(log: Path) -> None:
     """OCEAN consults with Moroni to clarify the project vision"""
     ensure_repo_structure()
     
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] I’ll ask a few quick questions to understand what you want to build.")
-    console.print("[dim]Note: I’m consulting Moroni (Architect) behind the scenes.[/dim]")
-    
-    # OCEAN/Moroni asks clarifying questions
-    name = _ask("📝 🌊 OCEAN: Project name — What should we call this project?", default="My Project")
-    kind = _ask(
+    console.print("[bold blue]🌊 OCEAN:[/bold blue] Please provide your PRD (paste or reference). This is the only required input.")
+    prd = _load_prd()
+    if not prd:
+        console.print("[dim]Paste your PRD content. Press Ctrl-D when done.[/dim]")
+        try:
+            prd = sys.stdin.read()
+        except KeyboardInterrupt:
+            prd = ""
+    if prd:
+        (DOCS / "prd.md").write_text(prd, encoding="utf-8")
+        write_log(log, "[OCEAN] PRD captured to docs/prd.md", f"[OCEAN] PRD length: {len(prd)}")
+
+    inferred = _parse_prd(prd or "")
+    name = inferred.get("name") or _ask("📝 🌊 OCEAN: Project name — What should we call this project?", default="My Project")
+    kind = inferred.get("kind") or _ask(
         "🏗️ 🌊 OCEAN: Project type — What type of project is this?",
         choices=["web", "api", "cli", "mobile", "desktop"],
         default="web",
     )
-    description = _ask("💭 🌊 OCEAN: Short description — Can you describe it in one line?", default="")
-    goals = _ask("🎯 🌊 OCEAN: Goals — What are the primary goals?", default="prototype, learn, ship")
-    constraints = _ask("⚠️ 🌊 OCEAN: Constraints — Any constraints I should know about?", default="")
+    description = inferred.get("description") or _ask("💭 🌊 OCEAN: Short description — Can you describe it in one line?", default="")
+    goals = ", ".join(inferred.get("goals") or []) or _ask("🎯 🌊 OCEAN: Goals — What are the primary goals?", default="prototype, learn, ship")
+    constraints = ", ".join(inferred.get("constraints") or []) or _ask("⚠️ 🌊 OCEAN: Constraints — Any constraints I should know about?", default="")
 
     spec = {
         "name": name.strip(),
@@ -300,6 +447,20 @@ def _do_plan(log: Path) -> None:
     if runtime_summary:
         console.print(f"🔗 [green]Open: {runtime_summary}[/green]")
 
+    # Auto-provision workspace for web/api projects
+    if spec.kind in ("web", "api"):
+        _provision_workspace(spec.name)
+        # Persist state
+        slug = _slugify(spec.name)
+        state_path = PROJECTS / slug / "state.json"
+        data = {
+            "name": spec.name,
+            "kind": spec.kind,
+            "runtime": runtime_summary,
+            "createdAt": datetime.now().isoformat(),
+        }
+        state_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
 
 @app.command(help="Ask clarifying questions and save docs/project.json")
 def clarify():
@@ -330,6 +491,160 @@ def init(force: bool = typer.Option(False, "--force", help="Overwrite existing f
         chat()
     else:
         console.print("\n💡 Tip: Use 'ocean' (no args) for the full experience, or 'ocean clarify' to start.")
+
+
+def _provision_workspace(proj_name: str) -> Path:
+    """Internal helper to create a workspace folder with runtime helpers and DB."""
+    ensure_repo_structure()
+    slug = _slugify(proj_name)
+    dest = PROJECTS / slug
+    dest.mkdir(parents=True, exist_ok=True)
+
+    # Copy artifacts if present
+    for src_dir_name in ("backend", "ui", "devops"):
+        src = ROOT / src_dir_name
+        if src.exists():
+            shutil.copytree(src, dest / src_dir_name, dirs_exist_ok=True)
+
+    # Create data directory and simple SQLite DB
+    data_dir = dest / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_path = data_dir / "app.db"
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute("create table if not exists kv (k text primary key, v text)")
+        conn.commit()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    # Create .env and README in workspace
+    (dest / ".env").write_text(
+        "PORT=8000\nENV=development\n# Optional: export Codex auth for in-container use\n# CODEX_AUTH_TOKEN=\n",
+        encoding="utf-8",
+    )
+    (dest / "README.md").write_text(
+        f"# {proj_name} Workspace\n\nThis workspace was provisioned by OCEAN.\n\n- Backend: ./backend\n- UI: ./ui\n- DevOps: ./devops\n- Data (SQLite): ./data/app.db\n\nUse ./run.sh to start locally.\n",
+        encoding="utf-8",
+    )
+
+    # Create run.sh helper
+    run_sh = dest / "run.sh"
+    run_sh.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+# Create venv if missing
+if [ ! -d venv ]; then
+  python3 -m venv venv
+fi
+source venv/bin/activate
+
+# Install deps for backend if present
+if [ -d backend ]; then
+  python -m pip install --upgrade pip >/dev/null
+  pip install fastapi[all] uvicorn >/dev/null
+fi
+
+# Start backend
+if [ -d backend ]; then
+  (uvicorn backend.app:app --host 127.0.0.1 --port 8000 &)
+  BACK_PID=$!
+  echo "Backend: http://127.0.0.1:8000/healthz (pid $BACK_PID)"
+fi
+
+# Serve UI if present
+if [ -d ui ]; then
+  python -m http.server 5173 -d ui &
+  UI_PID=$!
+  echo "UI: http://127.0.0.1:5173 (pid $UI_PID)"
+fi
+
+wait
+""",
+        encoding="utf-8",
+    )
+    run_sh.chmod(0o755)
+
+    # Proactively create workspace venv and install runtime deps
+    venv_path = dest / "venv"
+    _create_venv(venv_path)
+    pip = venv_path / "bin" / "pip"
+    if pip.exists():
+        subprocess.run([str(pip), "install", "--upgrade", "pip"], check=False)
+        subprocess.run([str(pip), "install", "fastapi[all]", "uvicorn"], check=False)
+
+    # Docker assets
+    (dest / ".dockerignore").write_text(
+        ".venv\nvenv\n__pycache__\n*.pyc\nlogs\n*.egg-info\n.env\n",
+        encoding="utf-8",
+    )
+    (dest / "Dockerfile").write_text(
+        """# Backend image
+FROM python:3.11-slim
+WORKDIR /app
+
+# Install runtime deps
+RUN python -m pip install --upgrade pip \
+    && pip install fastapi[all] uvicorn
+
+# Copy backend only
+COPY backend ./backend
+
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+""",
+        encoding="utf-8",
+    )
+    (dest / "docker-compose.yml").write_text(
+        """version: "3.9"
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend:ro
+    env_file:
+      - .env
+    environment:
+      - ENV=development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+  ui:
+    image: nginx:alpine
+    ports:
+      - "5173:80"
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+""",
+        encoding="utf-8",
+    )
+    return dest
+
+
+@app.command(help="Provision an isolated project workspace in projects/<slug>")
+def provision(name: Optional[str] = typer.Option(None, "--name", help="Project name (defaults to docs/project.json)")):
+    """Create projects/<slug> with backend/ui/devops, venv, and a simple DB."""
+    spec = _load_project_spec()
+    if not spec and not name:
+        console.print("[yellow]⚠️ No project spec found. Provide --name or run 'ocean clarify' first.[/yellow]")
+        raise typer.Exit(code=1)
+    proj_name = name or spec.get("name", "My Project")
+    dest = _provision_workspace(proj_name)
+    console.print(f"✅ [green]Workspace provisioned[/green]: {dest}")
+    console.print("🔗 Open: http://127.0.0.1:8000/healthz | http://127.0.0.1:5173")
 
 
 @app.command(help="Run backend tests via pytest")
@@ -456,6 +771,42 @@ def deploy(dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Pr
         return
     
     console.print("[yellow]⚠️ Live deployment not implemented. Use --dry-run or see docs/deploy.md[/yellow]")
+
+
+@app.command(help="Show Codex MCP status")
+def mcp():
+    """Display MCP status and configuration."""
+    s = MCP.status()
+    table = Table(title="🔌 MCP Status")
+    table.add_column("Key", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("enabled", str(s["enabled"]))
+    table.add_row("provider", s["provider"]) 
+    for k, v in s.get("env", {}).items():
+        table.add_row(k, v)
+    console.print(table)
+
+@app.command(help="Attempt MCP smoke test against 'codex mcp' and list tools")
+def mcp_smoke():
+    from .mcp import MCP
+    from .mcp_client import StdioJsonRpcClient
+    logs = LOGS
+    logs.mkdir(parents=True, exist_ok=True)
+    log = logs / "mcp-smoke-rpc.log"
+    client = StdioJsonRpcClient(log=log)
+    try:
+        client.start()
+        client.initialize()
+        tools = client.list_tools()
+        table = Table(title="MCP Tools")
+        table.add_column("name", style="cyan")
+        table.add_column("desc", style="green")
+        for t in tools:
+            table.add_row(str(t.get("name")), (t.get("description") or "")[:80])
+        console.print(table)
+        console.print("✅ MCP smoke test OK")
+    except Exception as e:
+        console.print(f"❌ MCP smoke test failed: {e}")
 
 
 if __name__ == "__main__":

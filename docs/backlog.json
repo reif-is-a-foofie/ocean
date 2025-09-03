@@ -9,15 +9,6 @@
     ]
   },
   {
-    "title": "Create web backend",
-    "description": "Implement FastAPI backend with endpoints",
-    "owner": "Q",
-    "files_touched": [
-      "backend/app.py",
-      "backend/models.py"
-    ]
-  },
-  {
     "title": "Create web interface design",
     "description": "Design web-based user interface and user experience",
     "owner": "Edna",
@@ -25,6 +16,15 @@
       "ui/index.html",
       "ui/styles.css",
       "docs/design_system.md"
+    ]
+  },
+  {
+    "title": "Create web backend",
+    "description": "Implement FastAPI backend with endpoints",
+    "owner": "Q",
+    "files_touched": [
+      "backend/app.py",
+      "backend/models.py"
     ]
   },
   {
@@ -51,5 +51,11 @@
     "files_touched": [
       "devops/deploy.yaml"
     ]
+  },
+  {
+    "title": "Start local runtime",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8000/healthz | http://127.0.0.1:5173",
+    "owner": "Mario",
+    "files_touched": []
   }
 ]
