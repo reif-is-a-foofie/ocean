@@ -61,8 +61,20 @@ class StdioJsonRpcClient:
                     buf = rest
                     self._in_q.put(msg)
 
-        t = threading.Thread(target=_reader, daemon=True)
-        t.start()
+        t_out = threading.Thread(target=_reader, daemon=True)
+        t_out.start()
+
+        # Stderr reader for diagnostics
+        def _stderr_reader():
+            assert self.proc and self.proc.stderr
+            while True:
+                line = self.proc.stderr.readline()
+                if not line:
+                    break
+                self._log_io("err", line.rstrip(b"\n"))
+
+        t_err = threading.Thread(target=_stderr_reader, daemon=True)
+        t_err.start()
 
     def _log_io(self, direction: str, payload: bytes) -> None:
         if not self._log:
@@ -135,12 +147,12 @@ class StdioJsonRpcClient:
         raise MCPError(f"timeout waiting for response to {method}")
 
     # Convenience wrappers
-    def initialize(self) -> Any:
+    def initialize(self, timeout: float | None = None) -> Any:
         params = {
             "clientInfo": {"name": "ocean", "version": "0.1.0"},
             "protocolVersion": "2024-10-07",
         }
-        return self.rpc("initialize", params=params, timeout=15.0)
+        return self.rpc("initialize", params=params, timeout=30.0 if timeout is None else timeout)
 
     def list_tools(self) -> list[dict[str, Any]]:
         res = self.rpc("tools/list", params={})
@@ -148,4 +160,3 @@ class StdioJsonRpcClient:
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         return self.rpc("tools/call", params={"name": name, "arguments": arguments}, timeout=30.0)
-

@@ -67,15 +67,36 @@ class MCP:
             return None
         if inst.client_log is None:
             inst.client_log = inst.log_file.parent / (inst.log_file.stem + "-rpc.log")
-        client = StdioJsonRpcClient(cmd=None, cwd=None, log=inst.client_log)
-        try:
-            client.start()
-            client.initialize()
-        except Exception as e:
-            with inst.log_file.open("a", encoding="utf-8") as f:
-                f.write(f"[MCP] client init failed: {e}\n")
-            return None
-        return client
+
+        # Candidates: env override or common variants
+        cmd_env = os.getenv("OCEAN_MCP_CMD")
+        candidates: list[list[str]]
+        if cmd_env:
+            candidates = [shlex.split(c.strip()) for c in cmd_env.split("||") if c.strip()]
+        else:
+            candidates = [
+                ["codex", "mcp"],
+                ["codex", "mcp", "--stdio"],
+            ]
+
+        last_err = None
+        for cmd in candidates:
+            client = StdioJsonRpcClient(cmd=cmd, cwd=None, log=inst.client_log)
+            try:
+                client.start()
+                client.initialize()
+                # Persist chosen cmd for status visibility
+                inst.cmd = " ".join(cmd)
+                return client
+            except Exception as e:  # pragma: no cover - depends on external binary
+                last_err = e
+                with inst.log_file.open("a", encoding="utf-8") as f:
+                    f.write(f"[MCP] client init failed with cmd={' '.join(cmd)}: {e}\n")
+                continue
+        # All candidates failed
+        with inst.log_file.open("a", encoding="utf-8") as f:
+            f.write(f"[MCP] all client init attempts failed: {last_err}\n")
+        return None
 
     @staticmethod
     def status() -> dict:

@@ -230,6 +230,9 @@ def chat(prd: Optional[str] = typer.Option(None, "--prd", help="Path to PRD file
     
     # Print banner and initialize Codex MCP
     console.print(banner())
+    # Run doctor at startup unless disabled
+    if os.getenv("OCEAN_NO_DOCTOR") not in ("1", "true", "True"):
+        _run_doctor_quick()
     MCP.ensure_started(log)
     # Ensure project-level venv for convenience
     _ensure_root_venv()
@@ -837,3 +840,61 @@ def entrypoint():
     if len(sys.argv) == 1:
         sys.argv.append("chat")
     app()
+
+
+@app.command(help="Diagnose Codex MCP environment and readiness")
+def doctor():
+    _run_doctor_quick(full=True)
+
+
+def _run_doctor_quick(full: bool = False) -> None:
+    """Quick environment checks for Codex MCP.
+
+    - Verifies codex on PATH
+    - Shows codex --version
+    - Attempts MCP smoke (initialize + list tools) with short timeout if full=True
+    """
+    table = Table(title="🔍 Ocean Doctor")
+    table.add_column("Check", style="cyan")
+    table.add_column("Result", style="green")
+
+    # PATH check
+    codex_path = shutil.which("codex")
+    table.add_row("codex in PATH", codex_path or "not found")
+
+    # Version check
+    version = "(n/a)"
+    if codex_path:
+        try:
+            out = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
+            version = (out.stdout or out.stderr).strip() or "ok"
+        except Exception as e:
+            version = f"error: {e}"
+    table.add_row("codex --version", version)
+
+    # Auth check (best-effort)
+    auth = "(unknown)"
+    if codex_path:
+        try:
+            out = subprocess.run(["codex", "auth", "status"], capture_output=True, text=True, timeout=5)
+            auth = (out.stdout or out.stderr).strip() or "ok"
+        except Exception:
+            auth = "run 'codex auth login'"
+    table.add_row("codex auth", auth)
+
+    # MCP smoke (short attempt)
+    if full and codex_path:
+        try:
+            from .mcp_client import StdioJsonRpcClient
+            log = LOGS / "mcp-smoke-rpc.log"
+            client = StdioJsonRpcClient(log=log)
+            client.start()
+            client.initialize(timeout=8.0)
+            tools = client.list_tools()
+            table.add_row("MCP initialize", "ok")
+            table.add_row("MCP tools", str(len(tools)))
+        except Exception as e:
+            table.add_row("MCP initialize", f"fail: {e}")
+            table.add_row("MCP tools", "-")
+
+    console.print(table)
