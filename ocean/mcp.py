@@ -34,12 +34,16 @@ class MCP:
     @staticmethod
     def ensure_started(log_path: Path | None = None) -> None:
         enabled = os.getenv("OCEAN_MCP_ENABLED", "1") not in ("0", "false", "False")
-        status_line = f"[MCP] Codex MCP {'enabled' if enabled else 'disabled'} at {datetime.now().isoformat()}"
+        provider = os.getenv("OCEAN_MCP_PROVIDER") or ("codex-cli" if shutil.which("codex") else "stub")
+        status_line = f"[MCP] Codex MCP {'enabled' if enabled else 'disabled'} provider={provider} at {datetime.now().isoformat()}"
         if log_path is not None:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8") as f:
                 f.write(status_line + "\n")
-        print("🔌 Codex MCP: initialized (stub)" if enabled else "⚠️ Codex MCP: disabled via OCEAN_MCP_ENABLED")
+        if enabled:
+            print(f"🔌 Codex MCP: provider={provider}")
+        else:
+            print("⚠️ Codex MCP: disabled via OCEAN_MCP_ENABLED")
 
     @staticmethod
     def start_for_agent(agent: str, logs_dir: Path) -> MCPInstance:

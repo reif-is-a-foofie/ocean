@@ -312,14 +312,27 @@ def _do_clarify(log: Path) -> None:
     """OCEAN consults with Moroni to clarify the project vision"""
     ensure_repo_structure()
     
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] Please provide your PRD (paste or reference). This is the only required input.")
+    console.print("[bold blue]🌊 OCEAN:[/bold blue] Please provide your PRD (this is the only required input).")
     prd = _load_prd()
-    if not prd:
-        console.print("[dim]Paste your PRD content. Press Ctrl-D when done.[/dim]")
+    while not prd:
+        path_input = typer.prompt("PRD file path (leave blank to paste)", default="").strip()
+        if path_input:
+            prd_path = Path(path_input)
+            if prd_path.exists():
+                prd = prd_path.read_text(encoding="utf-8")
+                break
+            else:
+                console.print(f"[yellow]⚠️ PRD file not found: {prd_path}[/yellow]")
+                continue
+        console.print("[dim]Paste your PRD content. Press Ctrl-D (Ctrl-Z on Windows) when done.[/dim]")
         try:
-            prd = sys.stdin.read()
+            pasted = sys.stdin.read()
         except KeyboardInterrupt:
-            prd = ""
+            pasted = ""
+        if pasted.strip():
+            prd = pasted
+        else:
+            console.print("[yellow]⚠️ PRD is required. Let's try again.[/yellow]")
     if prd:
         (DOCS / "prd.md").write_text(prd, encoding="utf-8")
         write_log(log, "[OCEAN] PRD captured to docs/prd.md", f"[OCEAN] PRD length: {len(prd)}")
@@ -872,12 +885,16 @@ def _run_doctor_quick(full: bool = False) -> None:
             version = f"error: {e}"
     table.add_row("codex --version", version)
 
-    # Auth check (best-effort)
+    # Auth check (best-effort; some versions lack 'auth status')
     auth = "(unknown)"
     if codex_path:
         try:
-            out = subprocess.run(["codex", "auth", "status"], capture_output=True, text=True, timeout=5)
-            auth = (out.stdout or out.stderr).strip() or "ok"
+            out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=5)
+            txt = (out.stdout or out.stderr).strip()
+            if "login" in txt.lower():
+                auth = "use 'codex auth login' if needed"
+            else:
+                auth = txt or "ok"
         except Exception:
             auth = "run 'codex auth login'"
     table.add_row("codex auth", auth)
