@@ -4,6 +4,7 @@ readme.md
 ocean/__init__.py
 ocean/agents.py
 ocean/cli.py
+ocean/crewai_adapter.py
 ocean/mcp.py
 ocean/mcp_client.py
 ocean/models.py
