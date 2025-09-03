@@ -814,11 +814,8 @@ if __name__ == "__main__":
 
 
 def entrypoint():
-    # Check if any command arguments were provided (excluding script name)
-    # If only the script name is in argv, default to chat
+    # If no args were provided, default to invoking the `chat` command via Typer
+    # so that options get parsed/injected correctly (avoids OptionInfo default).
     if len(sys.argv) == 1:
-        # No command arguments provided, run the main interactive experience
-        chat()
-    else:
-        # Command arguments provided, run the CLI app
-        app()
+        sys.argv.append("chat")
+    app()
