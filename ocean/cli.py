@@ -266,7 +266,7 @@ def chat(prd: Optional[str] = typer.Option(None, "--prd", help="Path to PRD file
     _do_clarify(log)
 
     # Optional CrewAI orchestration path
-    if os.getenv("OCEAN_USE_CREWAI") == "1":
+    if os.getenv("OCEAN_USE_CREWAI", "1") not in ("0", "false", "False"):
         prd_text = _load_prd() or ""
         console.print("\n[bold blue]🌊 OCEAN:[/bold blue] CrewAI mode enabled — orchestrating agents via CrewAI while Codex writes code…")
         try:
