@@ -262,6 +262,24 @@ def chat(prd: Optional[str] = typer.Option(None, "--prd", help="Path to PRD file
     console.print("[dim]OCEAN is consulting with Moroni (Architect)…[/dim]")
     _do_clarify(log)
 
+    # Optional CrewAI orchestration path
+    if os.getenv("OCEAN_USE_CREWAI") == "1":
+        prd_text = _load_prd() or ""
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] CrewAI mode enabled — orchestrating agents via CrewAI while Codex writes code…")
+        try:
+            # Ensure MCP instances exist for agents
+            for agent_name in ("Moroni", "Q", "Edna", "Mario"):
+                MCP.start_for_agent(agent_name, LOGS)
+            from .crewai_adapter import CrewRunner
+            runner = CrewRunner()
+            runner.run_project(prd_text)
+            console.print("✅ [bold blue]🌊 OCEAN:[/bold blue] Crew completed initial deliverables via Codex MCP.")
+        except Exception as e:
+            console.print(f"[red]❌ CrewAI integration failed: {e}[/red]")
+            raise typer.Exit(code=1)
+        console.print("🔗 Use 'ocean provision' for a workspace with Docker + venv.")
+        return
+
     # Non-interactive phases can use a spinner
     with Progress(
         SpinnerColumn(),

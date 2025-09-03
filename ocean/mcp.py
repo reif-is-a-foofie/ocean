@@ -183,3 +183,31 @@ class MCP:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
         return True
+
+    @staticmethod
+    def shell_run(agent: str, command: str) -> Optional[dict]:
+        """Call a shell/run tool if exposed by Codex MCP; returns result dict or None.
+
+        In MCP-only mode, if no shell tool is available, raises.
+        """
+        client = MCP.get_client(agent)
+        if not client:
+            if MCP._mcp_only():
+                raise MCPError("MCP-only mode: shell client unavailable")
+            return None
+        try:
+            tools = client.list_tools()
+            override = os.getenv("OCEAN_MCP_TOOL_SHELL")
+            tool_name = override or MCP._select_tool(tools, ["shell", "run", "exec", "command"])
+            if not tool_name:
+                if MCP._mcp_only():
+                    raise MCPError("MCP-only mode: No shell tool discovered")
+                return None
+            res = client.call_tool(tool_name, {"command": command})
+            if isinstance(res, dict):
+                return res
+            return {"result": res}
+        except Exception as e:
+            if MCP._mcp_only():
+                raise
+            return None
