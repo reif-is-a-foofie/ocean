@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Iterable, Tuple, Optional
+import os
 
 from .agents import default_agents
 from .models import ProjectSpec, Task
@@ -46,29 +47,67 @@ def execute_backlog(backlog: Iterable[Task], docs_dir: Path, spec: ProjectSpec) 
     edna_tasks = [t for t in backlog if t.owner == "Edna"]
     mario_tasks = [t for t in backlog if t.owner == "Mario"]
 
+    # Helper: emit structured event to OCEAN_EVENTS_FILE
+    def emit(kind: str, **data):
+        path = os.getenv("OCEAN_EVENTS_FILE")
+        if not path:
+            return
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                payload = {"event": kind, **data}
+                f.write(json.dumps(payload) + "\n")
+        except Exception:
+            pass
+
     # Phase 1: Moroni
     if moroni_tasks:
         print(f"🤖 Executing {len(moroni_tasks)} tasks for Moroni...")
+        emit("phase_start", agent="Moroni", count=len(moroni_tasks))
+        for t in moroni_tasks:
+            emit("task_start", agent="Moroni", title=t.title)
         executed_tasks.extend(agents["Moroni"].execute(moroni_tasks, spec))
+        for t in moroni_tasks:
+            emit("task_end", agent="Moroni", title=t.title)
+        emit("phase_end", agent="Moroni")
 
     # Phase 2: Q and Edna in parallel
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = []
         if q_tasks:
             print(f"🤖 Executing {len(q_tasks)} tasks for Q...")
+            emit("phase_start", agent="Q", count=len(q_tasks))
+            for t in q_tasks:
+                emit("task_start", agent="Q", title=t.title)
             futures.append(pool.submit(agents["Q"].execute, q_tasks, spec))
         if edna_tasks:
             print(f"🤖 Executing {len(edna_tasks)} tasks for Edna...")
+            emit("phase_start", agent="Edna", count=len(edna_tasks))
+            for t in edna_tasks:
+                emit("task_start", agent="Edna", title=t.title)
             futures.append(pool.submit(agents["Edna"].execute, edna_tasks, spec))
         if futures:
             done, _ = wait(futures)
             for fut in done:
                 executed_tasks.extend(fut.result())
+            for t in q_tasks:
+                emit("task_end", agent="Q", title=t.title)
+            for t in edna_tasks:
+                emit("task_end", agent="Edna", title=t.title)
+            if q_tasks:
+                emit("phase_end", agent="Q")
+            if edna_tasks:
+                emit("phase_end", agent="Edna")
 
     # Phase 3: Mario
     if mario_tasks:
         print(f"🤖 Executing {len(mario_tasks)} tasks for Mario...")
+        emit("phase_start", agent="Mario", count=len(mario_tasks))
+        for t in mario_tasks:
+            emit("task_start", agent="Mario", title=t.title)
         executed_tasks.extend(agents["Mario"].execute(mario_tasks, spec))
+        for t in mario_tasks:
+            emit("task_end", agent="Mario", title=t.title)
+        emit("phase_end", agent="Mario")
         runtime_summary = getattr(agents["Mario"], "last_runtime_summary", None)
 
     # Write documentation

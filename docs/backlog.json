@@ -28,6 +28,14 @@
     ]
   },
   {
+    "title": "Prepare codegen context",
+    "description": "Compress project context and write docs/context_summary.md",
+    "owner": "Mario",
+    "files_touched": [
+      "docs/context_summary.md"
+    ]
+  },
+  {
     "title": "Add CI workflow",
     "description": "Set up automated testing and quality checks",
     "owner": "Mario",
@@ -54,7 +62,7 @@
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8000/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8003/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   }

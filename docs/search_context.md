@@ -1,0 +1,9 @@
+# Brave Search Context
+
+
+## FastAPI best practices 2025
+- [GitHub - zhanymkanov/fastapi-best-practices: FastAPI Best Practices and Conventions we used at our startup](https://github.com/zhanymkanov/fastapi-best-practices) — <strong>FastAPI</strong> <strong>Best</strong> <strong>Practices</strong> and Conventions we used at our startup - zhanymkanov/<strong>fastapi</strong>-<strong>best</strong>-<strong>practices</strong>
+- [Structuring a FastAPI Project: Best Practices - DEV Community](https://dev.to/mohammad222pr/structuring-a-fastapi-project-best-practices-53l6) — <strong>FastAPI</strong> is a powerful and efficient web framework for building APIs with Python. However, as projects...
+- [FastAPI Best Practices: A Condensed Guide with Examples](https://developer-service.blog/fastapi-best-practices-a-condensed-guide-with-examples/) — <strong>FastAPI</strong> is a modern, high-performance web framework for building APIs with Python, based on standard Python type hints.
+- [r/Python on Reddit: FastAPI Best Practices](https://www.reddit.com/r/Python/comments/wrt7om/fastapi_best_practices/) — 443 votes, 79 comments. Although <strong>FastAPI</strong> is a great framework with fantastic documentation, it&#x27;s not quite obvious how to build larger projects for…
+- [python - What are the best practices for structuring a FastAPI project? - Stack Overflow](https://stackoverflow.com/questions/64943693/what-are-the-best-practices-for-structuring-a-fastapi-project) — The problem that I want to solve related the project setup: Good names of directories so that their purpose is clear. Keeping all project files (including virtualenv) in one place, so I can easily...

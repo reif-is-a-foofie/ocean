@@ -1,12 +1,19 @@
 {
-  "name": "Dolphin Dash",
+  "name": "Ocean Project PRD — Web Tic-Tac-Toe",
   "kind": "web",
-  "description": "The game is an emoji runner themed to Ocean: you control a 🐬 dolphin jumping over sea hazards, snagging power-ups, and posting high scores to a leaderboard.",
+  "description": "## Summary",
   "goals": [
-    "prototype"
+    "Single‑player Tic‑Tac‑Toe vs computer",
+    "Simple",
+    "responsive UI (HTML/CSS/JS)",
+    "Minimal backend with health check and scores API",
+    "Persist high scores locally (file or SQLite)",
+    "Clear instructions and quick start script"
   ],
   "constraints": [
-    "run locally"
+    "Minimal dependencies",
+    "Work offline",
+    "no cloud services required"
   ],
-  "createdAt": "2025-09-02T19:11:04.839559"
+  "createdAt": "2025-09-03T21:28:22.493605"
 }

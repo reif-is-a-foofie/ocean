@@ -3,7 +3,10 @@ pyproject.toml
 readme.md
 ocean/__init__.py
 ocean/agents.py
+ocean/brave_search.py
 ocean/cli.py
+ocean/codex_exec.py
+ocean/context.py
 ocean/crewai_adapter.py
 ocean/mcp.py
 ocean/mcp_client.py

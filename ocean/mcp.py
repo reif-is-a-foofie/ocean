@@ -5,7 +5,6 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, Optional
-import shutil
 
 
 @dataclass
@@ -29,99 +28,44 @@ class MCP:
 
     @staticmethod
     def _mcp_only() -> bool:
-        return os.getenv("OCEAN_MCP_ONLY", "1") not in ("0", "false", "False")
+        # MCP removed; never enforce MCP-only behavior
+        return False
 
     @staticmethod
     def ensure_started(log_path: Path | None = None) -> None:
-        enabled = os.getenv("OCEAN_MCP_ENABLED", "1") not in ("0", "false", "False")
-        provider = os.getenv("OCEAN_MCP_PROVIDER") or ("codex-cli" if shutil.which("codex") else "stub")
-        status_line = f"[MCP] Codex MCP {'enabled' if enabled else 'disabled'} provider={provider} at {datetime.now().isoformat()}"
-        if log_path is not None:
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            with log_path.open("a", encoding="utf-8") as f:
-                f.write(status_line + "\n")
-        if enabled:
-            print(f"🔌 Codex MCP: provider={provider}")
-        else:
-            print("⚠️ Codex MCP: disabled via OCEAN_MCP_ENABLED")
+        # No-op; MCP disabled
+        return None
 
     @staticmethod
     def start_for_agent(agent: str, logs_dir: Path) -> MCPInstance:
-        enabled = os.getenv("OCEAN_MCP_ENABLED", "1") not in ("0", "false", "False")
-        provider = os.getenv("OCEAN_MCP_PROVIDER") or ("codex-cli" if shutil.which("codex") else "stub")
         logs_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        log_file = logs_dir / f"mcp-{agent.lower()}-{ts}.log"
-        line = f"[MCP] start agent={agent} provider={provider} ts={datetime.now().isoformat()} enabled={enabled}"
-        log_file.write_text(line + "\n", encoding="utf-8")
-        inst = MCPInstance(agent=agent, started_at=datetime.now().isoformat(), log_file=log_file, provider=provider)
+        log_file = logs_dir / f"mcp-{agent.lower()}.log"
+        log_file.write_text("MCP disabled\n", encoding="utf-8")
+        inst = MCPInstance(agent=agent, started_at=datetime.now().isoformat(), log_file=log_file, provider="stub")
         MCP._instances[agent] = inst
-        print(f"🔌 [MCP] Started instance for {agent} ({provider})")
         return inst
 
     @staticmethod
     def get_client(agent: str):
-        """Return a started stdio client if provider is codex-cli, else None."""
-        from .mcp_client import StdioJsonRpcClient
-
-        inst = MCP._instances.get(agent)
-        if not inst:
-            return None
-        if inst.provider != "codex-cli":
-            return None
-        if inst.client_log is None:
-            inst.client_log = inst.log_file.parent / (inst.log_file.stem + "-rpc.log")
-
-        # Candidates: env override or common variants
-        cmd_env = os.getenv("OCEAN_MCP_CMD")
-        candidates: list[list[str]]
-        if cmd_env:
-            candidates = [shlex.split(c.strip()) for c in cmd_env.split("||") if c.strip()]
-        else:
-            candidates = [
-                ["codex", "mcp"],
-                ["codex", "mcp", "--stdio"],
-            ]
-
-        last_err = None
-        for cmd in candidates:
-            client = StdioJsonRpcClient(cmd=cmd, cwd=None, log=inst.client_log)
-            try:
-                client.start()
-                client.initialize()
-                # Persist chosen cmd for status visibility
-                inst.cmd = " ".join(cmd)
-                return client
-            except Exception as e:  # pragma: no cover - depends on external binary
-                last_err = e
-                with inst.log_file.open("a", encoding="utf-8") as f:
-                    f.write(f"[MCP] client init failed with cmd={' '.join(cmd)}: {e}\n")
-                continue
-        # All candidates failed
-        with inst.log_file.open("a", encoding="utf-8") as f:
-            f.write(f"[MCP] all client init attempts failed: {last_err}\n")
+        # Removed: always return None
         return None
 
     @staticmethod
     def status() -> dict:
-        enabled = os.getenv("OCEAN_MCP_ENABLED", "1") not in ("0", "false", "False")
-        provider = os.getenv("OCEAN_MCP_PROVIDER") or ("codex-cli" if shutil.which("codex") else "stub")
-        return {
-            "enabled": enabled,
-            "env": {
-                "OCEAN_MCP_ENABLED": os.getenv("OCEAN_MCP_ENABLED", "1"),
-                "OCEAN_MCP_PROVIDER": os.getenv("OCEAN_MCP_PROVIDER", provider),
-            },
-            "provider": provider,
-            "instances": {k: {"agent": v.agent, "started_at": v.started_at, "log_file": str(v.log_file)} for k, v in MCP._instances.items()},
-        }
+        return {"enabled": False, "provider": "stub", "env": {}, "instances": {}}
 
     @staticmethod
     def status_for_agent(agent: str) -> Optional[dict]:
         inst = MCP._instances.get(agent)
         if not inst:
             return None
-        return {"agent": inst.agent, "started_at": inst.started_at, "log_file": str(inst.log_file), "provider": inst.provider}
+        return {
+            "agent": inst.agent,
+            "started_at": inst.started_at,
+            "log_file": str(inst.log_file),
+            "provider": inst.provider,
+            "cmd": getattr(inst, "cmd", None),
+        }
 
     # Convenience helpers (best-effort; rely on tool discovery and fall back safely)
     @staticmethod
@@ -149,64 +93,13 @@ class MCP:
 
         Returns a mapping path->content if available; otherwise None.
         """
-        client = MCP.get_client(agent)
-        if not client:
-            if MCP._mcp_only():
-                raise MCPError("MCP-only mode: Codex MCP client unavailable. Ensure 'brew install codex' and 'codex auth login'.")
-            return None
-        try:
-            tools = client.list_tools()
-            # Allow explicit override
-            override = os.getenv("OCEAN_MCP_TOOL_CODEGEN")
-            tool_name = override or MCP._select_tool(tools, ["code", "generate", "doc", "scaffold", "file"])
-            if not tool_name:
-                # Log available tools for debugging
-                with open(client._log or (Path("logs")/"mcp-debug.log"), "ab") as f:  # type: ignore[attr-defined]
-                    f.write(f"[debug] no codegen tool; tools={tools}\n".encode("utf-8"))
-                if MCP._mcp_only():
-                    raise MCPError("MCP-only mode: No suitable codegen tool discovered.")
-                return None
-            args = {"prompt": prompt}
-            if suggestions:
-                args["suggested_files"] = suggestions
-            res = client.call_tool(tool_name, args)
-            # Attempt to interpret common shapes
-            if isinstance(res, dict):
-                if "files" in res and isinstance(res["files"], dict):
-                    return {str(k): str(v) for k, v in res["files"].items()}
-                if "path" in res and "content" in res:
-                    return {str(res["path"]): str(res["content"]) }
-            if isinstance(res, list):
-                out: dict[str, str] = {}
-                for item in res:
-                    if isinstance(item, dict) and "path" in item and "content" in item:
-                        out[str(item["path"])] = str(item["content"])
-                return out or None
-        except Exception as e:
-            # Respect MCP-only mode: if set, do not fallback silently
-            if MCP._mcp_only():
-                raise
-            return None
         return None
 
     @staticmethod
     def write_file(agent: str, path: Path, content: str) -> bool:
         """Try to write via MCP write tool; fall back to local write on failure."""
-        client = MCP.get_client(agent)
-        if client:
-            try:
-                tools = client.list_tools()
-                tool_name = MCP._select_tool(tools, ["write", "file", "save"])
-                if tool_name:
-                    client.call_tool(tool_name, {"path": str(path), "content": content})
-                    return True
-            except Exception:
-                pass
-        # Fallback: local write (only if not MCP-only)
-        if MCP._mcp_only():
-            raise MCPError("MCP-only mode: write_file fallback disabled.")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
         return True
 
     @staticmethod
@@ -215,24 +108,4 @@ class MCP:
 
         In MCP-only mode, if no shell tool is available, raises.
         """
-        client = MCP.get_client(agent)
-        if not client:
-            if MCP._mcp_only():
-                raise MCPError("MCP-only mode: shell client unavailable")
-            return None
-        try:
-            tools = client.list_tools()
-            override = os.getenv("OCEAN_MCP_TOOL_SHELL")
-            tool_name = override or MCP._select_tool(tools, ["shell", "run", "exec", "command"])
-            if not tool_name:
-                if MCP._mcp_only():
-                    raise MCPError("MCP-only mode: No shell tool discovered")
-                return None
-            res = client.call_tool(tool_name, {"command": command})
-            if isinstance(res, dict):
-                return res
-            return {"result": res}
-        except Exception as e:
-            if MCP._mcp_only():
-                raise
-            return None
+        return None
