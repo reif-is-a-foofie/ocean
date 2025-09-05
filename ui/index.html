@@ -14,18 +14,6 @@
         </header>
         
         <main>
-            <section class="board-section">
-                <div id="status">Your turn (X)</div>
-                <div class="board" id="board"></div>
-                <div class="controls">
-                    <button id="newGame">New Game</button>
-                </div>
-            </section>
-
-            <section class="scores">
-                <h3>High Scores</h3>
-                <ul id="scores"></ul>
-            </section>
             <section class="hero">
                 <h2>Welcome to Ocean Project PRD — Web Tic-Tac-Toe</h2>
                 <p>## Summary</p>
@@ -52,28 +40,5 @@
             <p>Built by OCEAN's AI engineering team 🚀</p>
         </footer>
     </div>
-<script src="config.js"></script>
-<script>
-const apiBase = (window.API_BASE || location.origin.replace(/:\\d+$/, ':8000'));
-const boardEl = document.getElementById('board');
-const statusEl = document.getElementById('status');
-const scoresEl = document.getElementById('scores');
-const newBtn = document.getElementById('newGame');
-let board, gameOver, player='X', ai='O';
-function initBoard(){ board = Array(9).fill(null); gameOver=false; render(); statusEl.textContent='Your turn (X)'; }
-function render(){ boardEl.innerHTML=''; for(let i=0;i<9;i++){ const cell=document.createElement('div'); cell.className='cell'; cell.textContent = board[i]||''; cell.addEventListener('click', ()=>onCell(i)); boardEl.appendChild(cell);} }
-function onCell(i){ if(gameOver || board[i]) return; board[i]=player; render(); let w = winner(board); if(w){ endGame(w); return; } if(full(board)){ endGame('draw'); return; } statusEl.textContent='Computer thinking…'; setTimeout(()=>{ aiMove(); },150); }
-function full(b){ return b.every(Boolean); }
-function lines(){ return [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; }
-function winner(b){ for(const [a,c,d] of lines()){ if(b[a] && b[a]===b[c] && b[a]===b[d]) return b[a]; } return null; }
-function scoreTerminal(b){ const w = winner(b); if(w===ai) return 1; if(w===player) return -1; if(full(b)) return 0; return null; }
-function minimax(b, turn){ const term = scoreTerminal(b); if(term!==null) return {score: term}; const moves=[]; for(let i=0;i<9;i++) if(!b[i]){ b[i]=turn; const next=minimax(b, turn===ai?player:ai); moves.push({i, score: next.score}); b[i]=null; } if(turn===ai){ let best=moves.reduce((a,m)=> m.score>a.score?m:a, {score:-Infinity}); return best; } else { let best=moves.reduce((a,m)=> m.score<a.score?m:a, {score:Infinity}); return best; } }
-function aiMove(){ let best=null; for(let i=0;i<9;i++) if(!board[i]){ board[i]=ai; if(winner(board)===ai){ best={i}; board[i]=null; break; } board[i]=null; } if(!best){ best=minimax(board, ai); } const idx = best.i!==undefined? best.i : board.findIndex(x=>!x); if(idx>=0){ board[idx]=ai; } render(); const w = winner(board); if(w){ endGame(w); return; } if(full(board)){ endGame('draw'); return; } statusEl.textContent='Your turn (X)'; }
-function endGame(w){ gameOver=true; if(w==='draw'){ statusEl.textContent='Draw!'; } else if(w===player){ statusEl.textContent='You win!'; const name = prompt('You won! Enter your name for the high score:',''); if(name){ fetch(apiBase+'/scores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name, result:'win'})}).then(()=>loadScores()); } } else { statusEl.textContent='Computer wins!'; } }
-function loadScores(){ fetch(apiBase+'/scores').then(r=>r.json()).then(data=>{ scoresEl.innerHTML=''; (data.scores||[]).forEach(s=>{ const li=document.createElement('li'); try{ li.textContent = `${s.name} — ${s.result} — ${new Date(s.ts||'').toLocaleString()}`; }catch(e){ li.textContent = s.name+' — '+s.result; } scoresEl.appendChild(li); }) }).catch(()=>{}); }
-newBtn.addEventListener('click', initBoard);
-initBoard();
-loadScores();
-</script>
 </body>
 </html>

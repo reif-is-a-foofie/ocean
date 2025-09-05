@@ -1,0 +1,46 @@
+# Ocean Agent Init — Repo-Scout Workflow
+
+general:
+  context: |
+    All agents assume repo context exists with README.md and code folders.
+    Each agent runs an initial `codex exec` pass scoped to its domain.
+    Output = "findings + suggestions" → delivered back to Moroni.
+    Moroni integrates and orchestrates next steps.
+
+agents:
+  Moroni:
+    emoji: "🕹️"
+    role: planning, orchestration
+    kickoff: |
+      Collect reports from all agents.
+      Synthesize into architecture & roadmap.
+      Approve/reject proposals, then assign phases.
+
+  Q:
+    emoji: "🔫"
+    role: APIs, services, tests
+    kickoff: |
+      codex exec --scope backend --task "Audit backend files, propose 2 PRs."
+      Send results to Moroni.
+
+  Edna:
+    emoji: "🍩"
+    role: frontend, styles, UI docs
+    kickoff: |
+      codex exec --scope frontend --task "Review UI code, suggest 2 UX improvements."
+      Send results to Moroni.
+
+  Mario:
+    emoji: "🍄"
+    role: CI/CD, Docker, deploys
+    kickoff: |
+      codex exec --scope infra --task "Audit workflows/Docker, suggest 1 infra improvement."
+      Send results to Moroni.
+
+  Tony:
+    emoji: "🚀"
+    role: testing, stress, chaos
+    kickoff: |
+      codex exec --scope tests --task "Run tests, stress core loop, report issues."
+      Send results to Moroni.
+

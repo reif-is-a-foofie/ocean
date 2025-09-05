@@ -23,6 +23,9 @@ from .agents import default_agents
 from .models import ProjectSpec
 from .planner import generate_backlog, write_backlog, execute_backlog
 from .mcp import MCP
+from . import context as ctx
+from . import codex_exec
+from .persona import voice_brief
 
 
 def _is_test_env() -> bool:
@@ -470,6 +473,8 @@ def main(
     version: Optional[bool] = typer.Option(None, "--version", help="Show version and exit", is_eager=True),
     verbose: bool = typer.Option(True, "--verbose/--quiet", help="Show detailed TUI conversations and agent steps"),
     ask: bool = typer.Option(True, "--ask/--no-ask", help="Allow agents to ask the user clarifying questions"),
+    style: str = typer.Option("max", "--style", help="Persona style intensity: 'max' or 'low'", show_default=True),
+    no_ui: bool = typer.Option(False, "--no-ui", help="Run in streaming mode (no full-screen UI)"),
 ):
     if version:
         rprint(f"ocean {__version__}")
@@ -477,6 +482,13 @@ def main(
     # Propagate verbosity to subprocess-aware modules
     os.environ["OCEAN_VERBOSE"] = "1" if verbose else "0"
     os.environ["OCEAN_ALLOW_QUESTIONS"] = "1" if ask else "0"
+    # Persona style toggle (default: max)
+    s = (style or "max").strip().lower()
+    if s not in {"max", "low"}:
+        s = "max"
+    os.environ["OCEAN_STYLE"] = s
+    if no_ui:
+        os.environ["OCEAN_NO_UI"] = "1"
 
 
 @app.command(help="Run the interactive flow: clarify → crew intros → planning → staging")
@@ -1211,9 +1223,9 @@ def codex_chat():
     ensure_repo_structure()
     _load_env_file(ROOT / ".env")
     _ensure_codex_auth()
-    # Guard: require interactive TTY for Codex chat
-    if not sys.stdin.isatty() or not sys.stdout.isatty():
-        console.print("[yellow][Ocean][/yellow] Interactive chat requires a real terminal (TTY). Run in Terminal/iTerm.")
+    # Guard: require TTY unless --no-ui/stream mode is enabled
+    if (not sys.stdin.isatty() or not sys.stdout.isatty()) and os.getenv("OCEAN_NO_UI") not in ("1", "true", "True"):
+        console.print("[yellow][Ocean][/yellow] Interactive chat requires a real terminal (TTY). Run in Terminal/iTerm, or use --no-ui.")
         console.print("For diagnostics, run: ocean doctor")
         raise typer.Exit(code=2)
     try:
@@ -1254,6 +1266,80 @@ def autostart():
     backlog = generate_backlog(spec)
     execute_backlog(backlog, DOCS, spec)
     # No exit code significance; this is a fire-and-forget command
+    raise typer.Exit(code=0)
+
+
+@app.command(help="Run Repo-Scout: per-agent codex exec reports and Moroni synthesis")
+def scout():
+    ensure_repo_structure()
+    _load_env_file(ROOT / ".env")
+    # Build context bundle for Codex
+    spec_dict = _load_project_spec()
+    spec = ProjectSpec.from_dict(spec_dict) if spec_dict else ProjectSpec(name=Path.cwd().name, kind="web")
+    bundle = ctx.build_context_bundle(spec)
+
+    reports_dir = DOCS / "repo_scout"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    # Helper to emit feed lines
+    def emit(kind: str, **data):
+        path = os.getenv("OCEAN_EVENTS_FILE")
+        if not path:
+            return
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                payload = {"event": kind, **data}
+                f.write(json.dumps(payload) + "\n")
+        except Exception:
+            pass
+
+    tasks = [
+        ("Q", "backend", "Audit backend files, propose 2 PRs.", reports_dir / "Q.md"),
+        ("Edna", "frontend", "Review UI code, suggest 2 UX improvements.", reports_dir / "Edna.md"),
+        ("Mario", "infra", "Audit workflows/Docker, suggest 1 infra improvement.", reports_dir / "Mario.md"),
+        ("Tony", "tests", "Analyze tests, stress core loop, report issues.", reports_dir / "Tony.md"),
+    ]
+
+    for agent, scope, task, out_path in tasks:
+        instruction = (
+            f"You are {agent}, responsible for {scope}. Review the repository context and produce a short report with Findings and Suggestions.\n"
+            f"Scope: {scope}. Task: {task}\n"
+            "Return JSON mapping the path to Markdown content. Use headings: # Findings, # Suggestions, # Proposed PRs."
+            " Keep it concise and actionable."
+            "\nVoice: " + voice_brief(agent, context=scope)
+        )
+        files = codex_exec.generate_files(instruction, [str(out_path.relative_to(Path.cwd()))], bundle, agent=agent)
+        if files:
+            for rel, content in files.items():
+                p = Path(rel); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(content, encoding="utf-8")
+            emit("task_start", agent=agent, title=f"Repo-scout: {scope}", intent=task)
+            emit("task_end", agent=agent, title=f"Repo-scout: {scope}", intent=task)
+            emit("note", agent=agent, title=f"Report: {out_path}")
+
+    # Moroni synthesis
+    try:
+        combined = "\n\n".join([
+            (reports_dir / "Q.md").read_text(encoding="utf-8") if (reports_dir / "Q.md").exists() else "",
+            (reports_dir / "Edna.md").read_text(encoding="utf-8") if (reports_dir / "Edna.md").exists() else "",
+            (reports_dir / "Mario.md").read_text(encoding="utf-8") if (reports_dir / "Mario.md").exists() else "",
+            (reports_dir / "Tony.md").read_text(encoding="utf-8") if (reports_dir / "Tony.md").exists() else "",
+        ])
+        tmp = reports_dir / "_combined_reports.md"
+        tmp.write_text(combined, encoding="utf-8")
+        synth_path = reports_dir / "Moroni-synthesis.md"
+        instruction = (
+            "Synthesize the following agent reports into a cohesive architecture & roadmap. "
+            "Approve/reject proposals, and assign phased next steps. Keep it concise."
+            " Return JSON mapping to 'docs/repo_scout/Moroni-synthesis.md'."
+            "\nVoice: " + voice_brief("Moroni", context="planning")
+        )
+        files = codex_exec.generate_files(instruction, [str(synth_path)], tmp, agent="Moroni")
+        if files:
+            for rel, content in files.items():
+                p = Path(rel); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(content, encoding="utf-8")
+            emit("note", agent="Moroni", title=f"Synthesis: {synth_path}")
+    except Exception:
+        pass
     raise typer.Exit(code=0)
 
 if __name__ == "__main__":

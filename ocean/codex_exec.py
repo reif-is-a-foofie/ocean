@@ -52,6 +52,7 @@ def generate_files(
     suggested_files: Optional[list[str]] = None,
     context_file: Optional[Path] = None,
     timeout: int = 120,
+    agent: Optional[str] = None,
 ) -> Optional[Dict[str, str]]:
     """Use `codex exec` to generate files.
 
@@ -96,6 +97,10 @@ def generate_files(
 
     # Auth policy: prefer Codex login (subscription). Use OPENAI_API_KEY only as fallback, loudly.
     env = os.environ.copy()
+    if agent:
+        env["OCEAN_AGENT"] = agent
+        # Provide a hint label for Codex if supported (harmless otherwise)
+        env.setdefault("CODEX_RUN_LABEL", f"ocean:{agent}")
     global _last_mode
     if _logged_in_via_codex():
         # Ensure API key does not override subscription auth
@@ -111,6 +116,12 @@ def generate_files(
         _last_mode = "unavailable"
         return None
 
+    logs_dir = Path("logs"); logs_dir.mkdir(parents=True, exist_ok=True)
+    log_file: Optional[Path] = None
+    if agent:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_file = logs_dir / f"codex-{agent.lower()}-{ts}.log"
     try:
         proc = subprocess.run(
             cmd,
@@ -119,11 +130,28 @@ def generate_files(
             timeout=timeout,
             env=env,
         )
-    except Exception:
+    except Exception as e:
+        if log_file:
+            try:
+                log_file.write_text(f"ERROR: {e}\n", encoding="utf-8")
+            except Exception:
+                pass
         return None
 
     stdout = (proc.stdout or b"").decode("utf-8", errors="ignore")
     stderr = (proc.stderr or b"").decode("utf-8", errors="ignore")
+
+    # Persist raw outputs to per-agent log for debugging/traceability
+    if log_file:
+        try:
+            log_file.write_text(
+                """# Codex Exec Log\n\n## Command\n{cmd}\n\n## Instruction\n{instr}\n\n## STDOUT\n{out}\n\n## STDERR\n{err}\n""".format(
+                    cmd=" ".join(cmd), instr=instruction, out=stdout, err=stderr
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
 
     # Try to parse as JSON directly
     obj = None

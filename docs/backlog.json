@@ -62,7 +62,7 @@
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8003/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8005/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   }

@@ -5,7 +5,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from pathlib import Path
 from datetime import datetime
 
@@ -13,6 +13,12 @@ from rich.console import Console
 from rich.text import Text
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.widgets import TextArea
 import re
 import subprocess
 
@@ -40,15 +46,35 @@ def _now() -> str:
 
 FEED: List[dict] = []
 console = Console()
+_TASK_STATUS: Dict[Tuple[str, str], str] = {}
+_TASK_INTENT: Dict[Tuple[str, str], str] = {}
+_TASK_ORDER: List[Tuple[str, str]] = []
+_PHASE_ENDED: Dict[str, bool] = {}
+_ALL_DONE_POSTED: bool = False
+_UI_OUTPUT: TextArea | None = None
 
 def _append(author: str, text: str) -> None:
-    FEED.append({
+    msg = {
         "time": _now(),
         "author": author,
         "emoji": EMOJI.get(author, "💬"),
         "text": text,
-    })
-    _render()
+    }
+    FEED.append(msg)
+    # Incremental print: update UI if present; else print to console
+    line = f"[{msg['time']}] {msg['emoji']} {msg['author']}: "
+    short = msg['text'] if ("http://" in msg['text'] or "https://" in msg['text']) else (msg['text'][:49] + ('…' if len(msg['text'])>50 else ''))
+    if _UI_OUTPUT is not None:
+        try:
+            app = get_app()
+            def _do():
+                _UI_OUTPUT.buffer.insert_text(line + short + "\n")
+                _UI_OUTPUT.buffer.cursor_position = len(_UI_OUTPUT.buffer.text)
+            app.call_from_executor(_do)
+        except Exception:
+            console.print(line + short)
+    else:
+        console.print(line + short)
 
 def _format_with_links(text: str) -> Text:
     # Detect URLs and style them as clickable links
@@ -66,14 +92,12 @@ def _format_with_links(text: str) -> Text:
     return out
 
 def _render() -> None:
-    console.clear()
-    console.print("🌊 Ocean Feed")
+    # Legacy full redraw (unused). Kept for reference.
     for m in FEED[-200:]:
         prefix = Text(f"[{m['time']}] {m['emoji']} {m['author']}: ")
         body = _format_with_links(m['text'])
-        prefix.extend(body)
+        prefix.append_text(body)
         console.print(prefix)
-    console.print("")
 
 def _format_event_for_feed(ev: dict) -> tuple[str, str] | None:
     kind = ev.get("event")
@@ -91,6 +115,74 @@ def _format_event_for_feed(ev: dict) -> tuple[str, str] | None:
     return None
 
 
+def _update_task_registry(ev: dict) -> bool:
+    """Update in-memory task state. Returns True if there was a visible change."""
+    global _ALL_DONE_POSTED
+    kind = ev.get("event")
+    agent = ev.get("agent", "?")
+    title = (ev.get("title") or "").strip()
+    changed = False
+    if kind == "task_start" and title:
+        key = (agent, title)
+        if key not in _TASK_STATUS:
+            _TASK_ORDER.append(key)
+        if _TASK_STATUS.get(key) != "in progress":
+            _TASK_STATUS[key] = "in progress"
+            changed = True
+        intent = (ev.get("intent") or "").strip()
+        if intent:
+            _TASK_INTENT[key] = intent
+    elif kind == "task_end" and title:
+        key = (agent, title)
+        if key not in _TASK_STATUS:
+            _TASK_ORDER.append(key)
+        if _TASK_STATUS.get(key) != "done":
+            _TASK_STATUS[key] = "done"
+            changed = True
+        intent = (ev.get("intent") or "").strip()
+        if intent and not _TASK_INTENT.get(key):
+            _TASK_INTENT[key] = intent
+    elif kind == "phase_end":
+        _PHASE_ENDED[agent] = True
+        changed = True
+
+    # Reset final flag if any new activity starts
+    if kind == "task_start":
+        _ALL_DONE_POSTED = False
+    return changed
+
+
+def _post_task_snapshot_if_needed() -> None:
+    """Emit a compact snapshot of current tasks and final wrap when complete."""
+    global _ALL_DONE_POSTED
+    if not _TASK_ORDER:
+        return
+    # Build snapshot grouped by agent, preserving insertion order
+    grouped: Dict[str, List[Tuple[str, str]]] = {}
+    for agent, title in _TASK_ORDER:
+        status = _TASK_STATUS.get((agent, title), "in progress")
+        grouped.setdefault(agent, []).append((title, status))
+
+    lines: List[str] = ["Current tasks"]
+    for agent, items in grouped.items():
+        for i, (title, status) in enumerate(items):
+            prefix = f"{EMOJI.get(agent, '👥')} {agent} — " if i == 0 else " " * (len(agent) + 4)
+            key = (agent, title)
+            why = _TASK_INTENT.get(key)
+            if why:
+                # keep intent concise for the feed
+                short = why if len(why) <= 120 else (why[:117] + "…")
+                lines.append(f"  {prefix}{title} ({status}) — {short}")
+            else:
+                lines.append(f"  {prefix}{title} ({status})")
+    _append("Ocean", "\n".join(lines))
+
+    # Final wrap-up when all tasks are done and at least one phase ended
+    if (not any(st == "in progress" for st in _TASK_STATUS.values())) and _PHASE_ENDED and not _ALL_DONE_POSTED:
+        _ALL_DONE_POSTED = True
+        _append("Ocean", "✅ All tasks complete.")
+
+
 def run(argv: List[str] | None = None) -> int:
     """Run a simple CLI feed with input at bottom; stream Codex + team events."""
     argv = list(argv or [])
@@ -99,68 +191,81 @@ def run(argv: List[str] | None = None) -> int:
         sys.stderr.write("Codex CLI not found. Install with: brew install codex\n")
         return 127
 
-    # Require a real TTY for interactive feed
-    if not sys.stdin.isatty() or not sys.stdout.isatty():
-        sys.stdout.write("[Ocean] Feed requires a real terminal (TTY). Run in Terminal/iTerm.\n")
+    # Allow non-UI stream mode without a TTY
+    stream_mode = os.getenv("OCEAN_NO_UI") in ("1", "true", "True")
+    if (not sys.stdin.isatty() or not sys.stdout.isatty()) and not stream_mode:
+        sys.stdout.write("[Ocean] Feed requires a real terminal (TTY). Run in Terminal/iTerm, or use --no-ui.\n")
         return 2
 
-    import pty, select
-
-    # Spawn codex chat in a PTY so we can feed input and capture output
-    master, slave = pty.openpty()
-    pid = os.fork()
-    if pid == 0:
-        try:
-            os.setsid()
-        except Exception:
-            pass
-        os.dup2(slave, 0)
-        os.dup2(slave, 1)
-        os.dup2(slave, 2)
-        try:
-            os.close(master)
-            os.close(slave)
-        except Exception:
-            pass
-        os.execvp(codex, ["codex", "chat", *argv])
-        os._exit(127)
-
-    # Parent
-    try:
-        os.close(slave)
-    except Exception:
-        pass
+    # Spawn codex chat as a subprocess with pipes for feed integration
+    proc = subprocess.Popen(
+        [codex, "chat", *argv],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+    )
 
     stop = threading.Event()
-    _append("Ocean", "Chat started. I’ll orchestrate and keep this feed updated.")
+    if stream_mode:
+        console.print("🌊 Ocean Feed")
+        _append("Ocean", "Init: loading personas & context…")
+        _append("Ocean", "Init: starting Codex chat…")
+        _append("Ocean", "Init: queuing build (autostart)…")
+        _append("Ocean", "Init: queuing repo-scout…")
+    # Build minimal full-screen UI: scrollable feed + pinned input
+    output = TextArea(style="class:output", text="🌊 Ocean Feed\n", read_only=True, scrollbar=True, wrap_lines=True)
+    input_field = TextArea(height=1, prompt="You> ", multiline=False)
+    kb = KeyBindings()
+
+    @kb.add("enter")
+    def _(event):
+        text = input_field.text.strip()
+        input_field.buffer.reset()
+        if not text:
+            return
+        _append("You", text)
+        if text in {"/exit", ":q", ":quit", ":exit"}:
+            try:
+                if proc.stdin:
+                    proc.stdin.write("/exit\n"); proc.stdin.flush()
+            except Exception:
+                pass
+            event.app.exit(result=0)
+            return
+        try:
+            if proc.stdin:
+                proc.stdin.write(text + "\n"); proc.stdin.flush()
+        except Exception:
+            event.app.exit(result=0)
+
+    layout = Layout(HSplit([output, Window(height=1, char="-"), input_field]))
+    app = None
+    if not stream_mode:
+        app = Application(layout=layout, key_bindings=kb, full_screen=True)
+        # Register UI output for _append
+        global _UI_OUTPUT
+        _UI_OUTPUT = output
+        # Verbose startup (single-line, under 50 chars)
+        _append("Ocean", "Init: loading personas & context…")
+        _append("Ocean", "Init: starting Codex chat…")
+        _append("Ocean", "Init: queuing build (autostart)…")
+        _append("Ocean", "Init: queuing repo-scout…")
 
     def reader_loop():
-        buf = b""
-        while not stop.is_set():
-            r, _, _ = select.select([master], [], [], 0.1)
-            if master in r:
-                try:
-                    data = os.read(master, 4096)
-                except OSError:
-                    break
-                if not data:
-                    break
-                buf += data
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    try:
-                        s = line.decode(errors="ignore").rstrip()
-                    except Exception:
-                        s = ""
-                    if s:
-                        _append("Ocean", s)
-        if buf:
-            try:
-                s = buf.decode(errors="ignore").strip()
-            except Exception:
-                s = ""
+        if not proc.stdout:
+            return
+        for line in iter(proc.stdout.readline, ""):
+            s = line.rstrip("\n")
             if s:
                 _append("Ocean", s)
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
 
     def _find_latest_events() -> Path | None:
         try:
@@ -196,6 +301,20 @@ def run(argv: List[str] | None = None) -> int:
                         if ft:
                             who, txt = ft
                             _append(who, txt)
+                        if ev.get("event") == "note":
+                            t = ev.get("title") or ""
+                            _append(ev.get("agent", "Ocean"), t)
+                        # Runtime hints (URLs and quick tests)
+                        if ev.get("event") == "runtime":
+                            urls = ev.get("urls") or []
+                            if isinstance(urls, list):
+                                for u in urls:
+                                    _append("Ocean", f"Runtime: {u}")
+                                    if isinstance(u, str) and u.endswith("/healthz"):
+                                        _append("Ocean", f"Test: curl -fsSL {u} | jq")
+                            _append("Ocean", "Tip: open the UI link in your browser; use the health URL to verify the backend.")
+                        if _update_task_registry(ev):
+                            _post_task_snapshot_if_needed()
                     last_pos = f.tell()
             except Exception:
                 pass
@@ -206,33 +325,18 @@ def run(argv: List[str] | None = None) -> int:
     t_evt = threading.Thread(target=events_loop, daemon=True)
     t_evt.start()
 
-    session = PromptSession()
-    # Autostart orchestration to begin chatter immediately (fire-and-forget)
+    # Autostart orchestration and repo-scout to begin chatter immediately (fire-and-forget)
     try:
         subprocess.Popen([sys.executable, "-m", "ocean.cli", "autostart"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen([sys.executable, "-m", "ocean.cli", "scout"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
     try:
-        with patch_stdout(raw=True):
-            while True:
-                try:
-                    text = session.prompt("You> ")
-                except (EOFError, KeyboardInterrupt):
-                    text = "/exit"
-                msg = text.strip()
-                if not msg:
-                    continue
-                _append("You", msg)
-                if msg in {"/exit", ":q", ":quit", ":exit"}:
-                    try:
-                        os.write(master, ("/exit\n").encode())
-                    except Exception:
-                        pass
-                    break
-                try:
-                    os.write(master, (msg + "\n").encode())
-                except Exception:
-                    break
+        if app is not None:
+            return app.run()
+        # Stream mode: run briefly to validate output, then exit
+        time.sleep(3)
+        return 0
     finally:
         stop.set()
         try:
@@ -241,7 +345,11 @@ def run(argv: List[str] | None = None) -> int:
         except Exception:
             pass
         try:
-            os.close(master)
+            proc.terminate()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=2)
         except Exception:
             pass
     return 0

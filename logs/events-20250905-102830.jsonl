@@ -1,0 +1,24 @@
+{"event": "phase_start", "agent": "Moroni", "count": 1}
+{"event": "task_start", "agent": "Moroni", "title": "Design web application architecture"}
+{"event": "task_end", "agent": "Moroni", "title": "Design web application architecture"}
+{"event": "phase_end", "agent": "Moroni"}
+{"event": "phase_start", "agent": "Q", "count": 1}
+{"event": "task_start", "agent": "Q", "title": "Create web backend"}
+{"event": "phase_start", "agent": "Edna", "count": 1}
+{"event": "task_start", "agent": "Edna", "title": "Create web interface design"}
+{"event": "task_end", "agent": "Q", "title": "Create web backend"}
+{"event": "task_end", "agent": "Edna", "title": "Create web interface design"}
+{"event": "phase_end", "agent": "Q"}
+{"event": "phase_end", "agent": "Edna"}
+{"event": "phase_start", "agent": "Mario", "count": 5}
+{"event": "task_start", "agent": "Mario", "title": "Prepare codegen context"}
+{"event": "task_start", "agent": "Mario", "title": "Add CI workflow"}
+{"event": "task_start", "agent": "Mario", "title": "Create Dockerfile"}
+{"event": "task_start", "agent": "Mario", "title": "Create deployment config"}
+{"event": "task_start", "agent": "Mario", "title": "Start local runtime"}
+{"event": "task_end", "agent": "Mario", "title": "Prepare codegen context"}
+{"event": "task_end", "agent": "Mario", "title": "Add CI workflow"}
+{"event": "task_end", "agent": "Mario", "title": "Create Dockerfile"}
+{"event": "task_end", "agent": "Mario", "title": "Create deployment config"}
+{"event": "task_end", "agent": "Mario", "title": "Start local runtime"}
+{"event": "phase_end", "agent": "Mario"}

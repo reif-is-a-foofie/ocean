@@ -12,6 +12,7 @@ ocean/crewai_adapter.py
 ocean/mcp.py
 ocean/mcp_client.py
 ocean/models.py
+ocean/persona.py
 ocean/planner.py
 ocean/tui_fallback.py
 ocean.egg-info/PKG-INFO

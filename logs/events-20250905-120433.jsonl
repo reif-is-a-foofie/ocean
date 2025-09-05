@@ -1,0 +1,2 @@
+{"event": "phase_start", "agent": "Moroni", "count": 1}
+{"event": "task_start", "agent": "Moroni", "title": "Design web application architecture", "intent": "Create frontend/backend architecture and data flow"}
