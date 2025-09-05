@@ -26,6 +26,7 @@ from .mcp import MCP
 from . import context as ctx
 from . import codex_exec
 from .persona import voice_brief
+from .feed import feed as feed_line, agent_say, you_say
 
 
 def _is_test_env() -> bool:
@@ -131,31 +132,70 @@ def _start_local_runtime_simple() -> Optional[str]:
 
 
 def _ensure_codex_auth() -> None:
-    """Ensure Codex CLI is authenticated; if not, trigger login."""
+    """Ensure Codex CLI is authenticated; always trigger a best-effort login.
+
+    Per user policy: re-auth every time (idempotent), ignore failures.
+    """
     codex = shutil.which("codex")
     if not codex:
         return
     try:
-        out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=10)
-        txt = (out.stdout or out.stderr or "").lower()
-        if "login" in txt or "not authenticated" in txt:
-            console.print("[yellow]Codex auth required. Launching `codex auth login`…[/yellow]")
-            subprocess.run(["codex", "auth", "login"], check=False)
-        else:
-            # Best-effort: export a token for downstream tools if available.
-            # Try a few possible subcommands to surface a token from global auth.
-            if not os.getenv("CODEX_AUTH_TOKEN"):
+        # If a token already exists or CLI reports logged-in, skip active login
+        try:
+            from . import codex_exec as _ce
+            if os.getenv("CODEX_AUTH_TOKEN") or _ce._logged_in_via_codex():  # type: ignore[attr-defined]
+                # Best-effort: ensure token is exported for subprocesses
                 for args in (["auth", "print-token"], ["auth", "token"], ["auth", "--show-token"], ["auth", "export"]):
                     try:
                         tok = subprocess.run(["codex", *args], capture_output=True, text=True, timeout=5)
                         cand = (tok.stdout or tok.stderr or "").strip()
-                        # Heuristic: token-like if long enough and not multi-line
                         if cand and len(cand) > 20 and "\n" not in cand:
                             os.environ["CODEX_AUTH_TOKEN"] = cand
                             os.environ["OCEAN_CODEX_AUTH"] = "1"
                             break
                     except Exception:
                         continue
+                return
+        except Exception:
+            pass
+
+        # Attempt a login (idempotent if already authenticated)
+        proc = subprocess.run(["codex", "auth", "login"], capture_output=True, text=True, timeout=45, check=False)
+        # Try to extract id_token from any success URL printed
+        try:
+            import re, json as _json
+            combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            m = re.search(r"id_token=([A-Za-z0-9\-_.]+)", combined)
+            if m:
+                tok = m.group(1)
+                os.environ["CODEX_AUTH_TOKEN"] = tok
+                os.environ["OCEAN_CODEX_AUTH"] = "1"
+                # Persist a marker file for detection
+                home = Path.home() / ".codex"; home.mkdir(parents=True, exist_ok=True)
+                auth_file = home / "auth.json"
+                try:
+                    payload = {"id_token": tok, "updatedAt": datetime.now().isoformat(), "source": "ocean"}
+                    auth_file.write_text(_json.dumps(payload, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Probe status post-login
+        out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=10)
+        # Best-effort: export a token for downstream tools if available.
+        if not os.getenv("CODEX_AUTH_TOKEN"):
+            for args in (["auth", "print-token"], ["auth", "token"], ["auth", "--show-token"], ["auth", "export"]):
+                try:
+                    tok = subprocess.run(["codex", *args], capture_output=True, text=True, timeout=5)
+                    cand = (tok.stdout or tok.stderr or "").strip()
+                    # Heuristic: token-like if long enough and not multi-line
+                    if cand and len(cand) > 20 and "\n" not in cand:
+                        os.environ["CODEX_AUTH_TOKEN"] = cand
+                        os.environ["OCEAN_CODEX_AUTH"] = "1"
+                        break
+                except Exception:
+                    continue
     except Exception:
         pass
 
@@ -244,6 +284,81 @@ def session_log_path() -> Path:
     ensure_repo_structure()
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     return LOGS / f"session-{ts}.log"
+
+
+def feed(msg: str) -> None:
+    feed_line(msg)
+
+
+def _home_repo_root() -> Path:
+    """Return the path to the Ocean 'home' repo (where this package lives)."""
+    return Path(__file__).resolve().parent.parent
+
+
+def _switch_root(new_root: Path) -> None:
+    """Rebind module-level path constants to a new repository root."""
+    global ROOT, DOCS, LOGS, BACKEND, UI, DEVOPS, PROJECTS
+    ROOT = new_root
+    DOCS = ROOT / "docs"
+    LOGS = ROOT / "logs"
+    BACKEND = ROOT / "backend"
+    UI = ROOT / "ui"
+    DEVOPS = ROOT / "devops"
+    PROJECTS = ROOT / "projects"
+
+
+def _is_workspace(path: Path) -> bool:
+    return (path / ".ocean_workspace").exists()
+
+
+def _prepare_workspace_from_cwd() -> None:
+    """If running outside the Ocean home repo, copy the current repo into a safe workspace.
+
+    - Workspace name: ocean_<basename> (e.g., ocean_brython-snake)
+    - Created under the Ocean home repo root (sibling to 'ocean', 'docs', etc.)
+    - Skips typical transient directories (.git, venv, node_modules, __pycache__, logs)
+    - Switches CWD and rebinds ROOT/DOCS/… to the workspace
+    """
+    if os.getenv("OCEAN_DISABLE_WORKSPACE") in ("1", "true", "True"):
+        return
+    home = _home_repo_root()
+    here = Path.cwd()
+    # If we are already in the home repo or a workspace, do nothing
+    if here == home or str(here).startswith(str(home)):
+        # Still support marker check: if already a workspace, keep it
+        return
+    # Define workspace destination
+    ws_name = f"ocean_{here.name}"
+    dest = home / ws_name
+    dest.mkdir(parents=True, exist_ok=True)
+    # Copy content from current repo to workspace (best-effort incremental)
+    def _ignore(dir, names):  # noqa: ANN001
+        patterns = {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", "venv", ".venv", "node_modules", "logs", ".mypy_cache", ".DS_Store"}
+        return [n for n in names if n in patterns]
+    try:
+        # shutil.copytree with dirs_exist_ok for incremental sync
+        for item in here.iterdir():
+            if item.name in {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", "venv", ".venv", "node_modules", "logs", ".mypy_cache", ".DS_Store"}:
+                continue
+            target = dest / item.name
+            if item.is_dir():
+                shutil.copytree(item, target, dirs_exist_ok=True, ignore=_ignore)
+            else:
+                try:
+                    shutil.copy2(item, target)
+                except Exception:
+                    pass
+        # Write marker
+        (dest / ".ocean_workspace").write_text(json.dumps({"source": str(here), "createdAt": datetime.now().isoformat()}, indent=2), encoding="utf-8")
+        feed(f"🌊 Ocean: Created/updated workspace at {dest} (source: {here})")
+    except Exception as e:
+        feed(f"[yellow]🌊 Ocean: Workspace synchronization warning: {e}[/yellow]")
+    # Switch to workspace and rebind roots
+    try:
+        os.chdir(dest)
+        _switch_root(dest)
+    except Exception as e:
+        feed(f"[red]🌊 Ocean: Failed to switch to workspace: {e}[/red]")
 
 
 def write_log(path: Path, *lines: str) -> None:
@@ -455,8 +570,36 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
     """
     import os as _os
 
+    # If questions disabled globally, return default immediately
+    if os.getenv("OCEAN_ALLOW_QUESTIONS", "1") in ("0", "false", "False"):
+        if default:
+            return default
+        # Choose first choice if provided, else empty string
+        return (choices[0] if choices else "") if choices else ""
+
+    # In test mode or non-TTY, use Rich Prompt (works with monkeypatch in tests)
     if _os.getenv("OCEAN_TEST") == "1" or not sys.stdin.isatty():
         return Prompt.ask(label, default=default, choices=choices)
+
+    # Simple combined-feed mode: inline prompt using input() with a consistent prefix
+    if _os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        # Print label as a feed line, then show a single-line You> prompt
+        console.print(f"[bold blue]🌊 OCEAN:[/bold blue] {label}")
+        hint = f" (default: {default})" if default else ""
+        if choices:
+            console.print(f"[dim]Choices: {', '.join(choices)}[/dim]")
+        try:
+            ans = input("You> ").strip()
+        except EOFError:
+            ans = ""
+        if not ans:
+            ans = default
+        else:
+            you_say(ans)
+        if choices and ans not in choices:
+            console.print(f"[yellow]Please choose one of: {', '.join(choices)}[/yellow]")
+            return _ask(label, default, choices)
+        return ans
 
     # Build label with choices hint if provided
     hint = f" [choices: {', '.join(choices)}]" if choices else ""
@@ -475,6 +618,7 @@ def main(
     ask: bool = typer.Option(True, "--ask/--no-ask", help="Allow agents to ask the user clarifying questions"),
     style: str = typer.Option("max", "--style", help="Persona style intensity: 'max' or 'low'", show_default=True),
     no_ui: bool = typer.Option(False, "--no-ui", help="Run in streaming mode (no full-screen UI)"),
+    feed: bool = typer.Option(True, "--feed/--no-feed", help="Combine output and prompts in a single feed (no spinners)", show_default=True),
 ):
     if version:
         rprint(f"ocean {__version__}")
@@ -489,6 +633,21 @@ def main(
     os.environ["OCEAN_STYLE"] = s
     if no_ui:
         os.environ["OCEAN_NO_UI"] = "1"
+    if feed:
+        os.environ["OCEAN_SIMPLE_FEED"] = "1"
+        # Dynamic Codex mode; allow API fallback if available
+        os.environ.pop("OCEAN_FORCE_CODEX", None)
+        # Disable CrewAI integration to keep flow simple and local
+        os.environ.setdefault("OCEAN_USE_CREWAI", "0")
+    else:
+        os.environ.pop("OCEAN_SIMPLE_FEED", None)
+
+    # Always activate a safe workspace when running outside the Ocean home repo
+    try:
+        _prepare_workspace_from_cwd()
+    except Exception:
+        # Non-fatal; proceed in-place if workspace prep fails
+        pass
 
 
 @app.command(help="Run the interactive flow: clarify → crew intros → planning → staging")
@@ -510,20 +669,23 @@ def chat(
     events_file = LOGS / f"events-{timestamp}.jsonl"
     os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
     
-    # Print banner and initialize Codex MCP
-    console.print(banner())
-    _ensure_codex_auth()
-    # Run doctor at startup unless disabled
-    if os.getenv("OCEAN_NO_DOCTOR") not in ("1", "true", "True"):
-        _run_doctor_quick()
+    # Initialize Codex MCP and greet
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        # Skip block banner; use cheeky feed lines instead
+        _ensure_codex_auth()
+        agent_say("Ocean", "Ahoy! I'm Ocean — caffeinated and ready to ship.")
+        agent_say("Ocean", f"Workspace: {Path.cwd()}")
+        agent_say("Ocean", "I’ll skim your repo, assemble the crew, and draft a plan.")
+    else:
+        # Traditional banner
+        console.print(banner())
+        _ensure_codex_auth()
+    # Ocean Doctor disabled by default per user request
     MCP.ensure_started(log)
     # Ensure project-level venv for convenience
     _ensure_root_venv()
+    # In feed mode we require Codex for codegen phases; errors are surfaced during plan/execute
     status = MCP.status()
-    # Enforce Codex-only mode by default: no Codex, no coding.
-    if (not _is_test_env()) and (status.get("provider") != "codex-cli"):
-        console.print("[red]❌ Codex CLI not detected. Install via 'brew install codex' and run 'codex auth login'.[/red]")
-        raise typer.Exit(code=1)
 
     # If PRD provided, persist to docs/prd.md
     if prd:
@@ -541,12 +703,18 @@ def chat(
             (DOCS / "prd.md").write_text(prd_text, encoding="utf-8")
             write_log(log, "[OCEAN] PRD saved to docs/prd.md", f"[OCEAN] PRD length: {len(prd_text)} chars")
     
-    console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Hello! I'm OCEAN, your AI-powered software engineering orchestrator.")
-    console.print("I'll help you build your project by coordinating with my specialized crew.")
-    console.print("Let me start by understanding what you want to build...\n")
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        pass
+    else:
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Hello! I'm OCEAN, your AI-powered software engineering orchestrator.")
+        console.print("I'll help you build your project by coordinating with my specialized crew.")
+        console.print("Let me start by understanding what you want to build...\n")
     
     # Do interactive prompts WITHOUT spinner to avoid input interference
-    console.print("[dim]OCEAN is consulting with Moroni (Architect)…[/dim]")
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed("🌊 Ocean: Consulting with Moroni (Architect)…")
+    else:
+        console.print("[dim]OCEAN is consulting with Moroni (Architect)…[/dim]")
     _do_clarify(log)
 
     # Optional CrewAI orchestration path
@@ -567,28 +735,63 @@ def chat(
         console.print("🔗 Use 'ocean provision' for a workspace with Docker + venv.")
         return
 
-    # Non-interactive phases can use a spinner
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        # Crew Spin-up
-        task2 = progress.add_task("OCEAN is assembling the crew...", total=None)
+    # Non-interactive phases: either spinner (default) or combined-feed prints (simple feed)
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed("🌊 Ocean: Assembling the crew…")
         _do_crew(log)
-        progress.update(task2, completed=True, description="✅ OCEAN assembled the crew")
+        # Proceed with planning and execution, but keep Codex disabled in feed
+        feed("🌊 Ocean: Creating your project plan…")
+        # Preflight Codex check (force mode)
+        try:
+            import os as _os
+            from . import codex_exec as _ce
+            if _os.getenv("OCEAN_FORCE_CODEX") in ("1", "true", "True"):
+                if not _ce.available():
+                    # Attempt auth once
+                    feed("🌊 Ocean: Attempting Codex auth…")
+                    _ensure_codex_auth()
+                if not _ce.available():
+                    feed("🌊 Ocean: ❌ Codex CLI not available. Install via 'brew install codex' and run 'codex auth login'.")
+                    raise typer.Exit(code=1)
+                # If not logged in and no API key, attempt auth then stop if still unauthenticated
+                if not getattr(_ce, "_logged_in_via_codex")() and not _os.getenv("OPENAI_API_KEY"):
+                    feed("🌊 Ocean: Attempting Codex login…")
+                    _ensure_codex_auth()
+                if not getattr(_ce, "_logged_in_via_codex")() and not _os.getenv("OPENAI_API_KEY"):
+                    feed("🌊 Ocean: ❌ Codex not authenticated. Run 'codex auth login' (or set OPENAI_API_KEY).")
+                    raise typer.Exit(code=1)
+        except typer.Exit:
+            raise
+        except Exception:
+            # If preflight check fails unexpectedly, proceed and let execution handle errors
+            pass
+        try:
+            _do_plan(log)
+        except Exception as e:
+            feed(f"🌊 Ocean: ❌ Execution failed — {e}")
+            raise typer.Exit(code=1)
+        feed("🌊 Ocean: Session complete.")
+        feed(f"📝 Session log: {log}")
+        return
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task2 = progress.add_task("OCEAN is assembling the crew...", total=None)
+            _do_crew(log)
+            progress.update(task2, completed=True, description="✅ OCEAN assembled the crew")
 
-        # In test mode, stop after crew to avoid long-running/mocked phases
-        if _is_test_env():
-            console.print("[dim]Test mode: skipping planning and execution.[/dim]")
-            console.print(f"\n🎉 [green]OCEAN has completed your project setup![/green]")
-            console.print(f"📝 Session log: [blue]{log}[/blue]")
-            return
+            if _is_test_env():
+                console.print("[dim]Test mode: skipping planning and execution.[/dim]")
+                console.print(f"\n🎉 [green]OCEAN has completed your project setup![/green]")
+                console.print(f"📝 Session log: [blue]{log}[/blue]")
+                return
 
-        # Planning
-        task3 = progress.add_task("OCEAN is creating your project plan...", total=None)
-        _do_plan(log)
-        progress.update(task3, completed=True, description="✅ OCEAN created your plan")
+            task3 = progress.add_task("OCEAN is creating your project plan...", total=None)
+            _do_plan(log)
+            progress.update(task3, completed=True, description="✅ OCEAN created your plan")
     
     console.print(f"\n🎉 [green]OCEAN has completed your project setup![/green]")
     console.print(f"📝 Session log: [blue]{log}[/blue]")
@@ -610,10 +813,10 @@ def _do_clarify(log: Path) -> None:
     """OCEAN consults with Moroni to clarify the project vision"""
     ensure_repo_structure()
     
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] Preparing project context…")
+    feed("🌊 Ocean: Preparing project context…")
     prd = _load_prd()
     if not prd:
-        console.print("[dim]No PRD found — synthesizing from repo…[/dim]")
+        feed("🌊 Ocean: No PRD found — synthesizing from repo…")
         prd = _autoprd_from_repo()
         (DOCS/"prd.md").write_text(prd, encoding="utf-8")
         write_log(log, "[OCEAN] PRD synthesized from repo", f"[OCEAN] PRD length: {len(prd)}")
@@ -665,22 +868,30 @@ def _do_clarify(log: Path) -> None:
         f"[OCEAN] Summary: name={spec['name']}, kind={spec['kind']}, goals={len(spec['goals'])}",
     )
     
-    console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Perfect! Moroni has clarified your vision.")
+    feed("🌊 Ocean: ✅ Moroni has clarified your vision.")
     
-    # Show summary
-    table = Table(title="📋 Project Summary (from Moroni's analysis)")
-    table.add_column("Field", style="cyan")
-    table.add_column("Value", style="green")
-    
-    table.add_row("Name", spec["name"])
-    table.add_row("Type", spec["kind"])
-    table.add_row("Description", spec["description"])
-    table.add_row("Goals", ", ".join(spec["goals"]))
-    if spec["constraints"]:
-        table.add_row("Constraints", ", ".join(spec["constraints"]))
-    
-    console.print(table)
-    console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Moroni has saved your project spec to {out}")
+    # Show summary (compact in feed mode)
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed(f"🌊 Ocean: Summary — Name: {spec['name']}")
+        feed(f"🌊 Ocean: Summary — Type: {spec['kind']}")
+        if spec.get("description"):
+            feed(f"🌊 Ocean: Summary — Description: {spec['description']}")
+        if spec.get("goals"):
+            feed(f"🌊 Ocean: Summary — Goals: {', '.join(spec['goals'])}")
+        if spec.get("constraints"):
+            feed(f"🌊 Ocean: Summary — Constraints: {', '.join(spec['constraints'])}")
+    else:
+        table = Table(title="📋 Project Summary (from Moroni's analysis)")
+        table.add_column("Field", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("Name", spec["name"])
+        table.add_row("Type", spec["kind"])
+        table.add_row("Description", spec["description"])
+        table.add_row("Goals", ", ".join(spec["goals"]))
+        if spec["constraints"]:
+            table.add_row("Constraints", ", ".join(spec["constraints"]))
+        console.print(table)
+    feed(f"🌊 Ocean: Moroni saved your project spec to {out}")
 
 
 def _do_crew(log: Path) -> None:
@@ -693,33 +904,34 @@ def _do_crew(log: Path) -> None:
     
     write_log(log, "[OCEAN] Assembling crew for project:", json.dumps(spec))
     
-    console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Excellent! Now let me assemble my specialized crew for: {spec['name']}")
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] Each agent brings unique expertise to your project...\n")
+    feed(f"🌊 Ocean: Assembling the crew for '{spec['name']}'…")
+    feed("🌊 Ocean: Each agent brings unique expertise to your project…")
     
-    crew_table = Table(title="🤖 The OCEAN Crew (Assembled by OCEAN)")
-    crew_table.add_column("Agent", style="cyan", no_wrap=True)
-    crew_table.add_column("Role", style="blue")
-    crew_table.add_column("Specialty", style="green")
-    
+    crew_lines: list[tuple[str, str, str]] = []
     for agent in default_agents():
         intro = agent.introduce()
-        console.print(f"🤖 {intro}")
+        feed(f"{intro}")
         write_log(log, intro)
-        
-        # Parse agent info for table
         if "Moroni" in intro:
-            crew_table.add_row("Moroni", "Architect & Brain", "Vision, Planning, Coordination")
+            crew_lines.append(("Moroni", "Architect & Brain", "Vision, Planning, Coordination"))
         elif "Q" in intro:
-            crew_table.add_row("Q", "Backend Engineer", "APIs, Services, Data Models")
+            crew_lines.append(("Q", "Backend Engineer", "APIs, Services, Data Models"))
         elif "Edna" in intro:
-            crew_table.add_row("Edna", "Designer & UI/UX", "Interfaces, Design Systems")
+            crew_lines.append(("Edna", "Designer & UI/UX", "Interfaces, Design Systems"))
         elif "Mario" in intro:
-            crew_table.add_row("Mario", "DevOps & Infrastructure", "CI/CD, Deployment, Monitoring")
-    
-    console.print(crew_table)
-    console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Perfect! My crew is assembled and ready to work on your project.")
-    # Explicit test-friendly line
-    console.print("[green]Crew assembled[/green]")
+            crew_lines.append(("Mario", "DevOps & Infrastructure", "CI/CD, Deployment, Monitoring"))
+    if os.getenv("OCEAN_SIMPLE_FEED") != "1":
+        crew_table = Table(title="🤖 The OCEAN Crew (Assembled by OCEAN)")
+        crew_table.add_column("Agent", style="cyan", no_wrap=True)
+        crew_table.add_column("Role", style="blue")
+        crew_table.add_column("Specialty", style="green")
+        for a, r, s in crew_lines:
+            crew_table.add_row(a, r, s)
+        console.print(crew_table)
+    else:
+        for a, r, s in crew_lines:
+            feed(f"🌊 Ocean: Crew — {a}: {r} — {s}")
+    feed("🌊 Ocean: Crew assembled ✅")
 
 
 def _do_plan(log: Path) -> None:
@@ -731,37 +943,57 @@ def _do_plan(log: Path) -> None:
     
     spec = ProjectSpec.from_dict(spec_dict)
     
-    console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Now let me coordinate my crew to create your project plan...")
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] Moroni, Q, Edna, and Mario are analyzing your requirements...")
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed("🌊 Ocean: Now let me coordinate my crew to create your project plan…")
+        feed("🌊 Ocean: Moroni, Q, Edna, and Mario are analyzing your requirements…")
+    else:
+        console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Now let me coordinate my crew to create your project plan...")
+        console.print("[bold blue]🌊 OCEAN:[/bold blue] Moroni, Q, Edna, and Mario are analyzing your requirements...")
     
     # Generate backlog from agent proposals
     backlog = generate_backlog(spec)
     
     # EXECUTE the backlog using agent capabilities
-    console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] My crew is now EXECUTING your project tasks...")
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed("🌊 Ocean: My crew is now EXECUTING your project tasks…")
+    else:
+        console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] My crew is now EXECUTING your project tasks...")
     bj, pm, runtime_summary = execute_backlog(backlog, DOCS, spec)
     
     write_log(log, f"[OCEAN] Crew completed planning and execution: {bj}")
     
-    console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Excellent! My crew has created AND BUILT your project!")
-    console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Backlog: {bj}")
-    console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Plan summary: {pm}")
-    if runtime_summary:
-        console.print(f"🌐 [bold blue]🌊 OCEAN:[/bold blue] Local runtime: [green]{runtime_summary}[/green]")
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed("🌊 Ocean: Excellent! My crew has created AND BUILT your project!")
+        feed(f"🌊 Ocean: Backlog: {bj}")
+        feed(f"🌊 Ocean: Plan summary: {pm}")
+        if runtime_summary:
+            feed(f"🌊 Ocean: Local runtime: {runtime_summary}")
+    else:
+        console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Excellent! My crew has created AND BUILT your project!")
+        console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Backlog: {bj}")
+        console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Plan summary: {pm}")
+        if runtime_summary:
+            console.print(f"🌐 [bold blue]🌊 OCEAN:[/bold blue] Local runtime: [green]{runtime_summary}[/green]")
         write_log(log, f"[OCEAN] Runtime: {runtime_summary}")
     
     # Show backlog summary
-    backlog_table = Table(title="📋 Project Backlog (EXECUTED by OCEAN's Crew)")
-    backlog_table.add_column("Task", style="cyan")
-    backlog_table.add_column("Owner", style="blue")
-    backlog_table.add_column("Files", style="green")
-    
-    for task in backlog:
-        files_str = ", ".join(task.files_touched) if task.files_touched else "None"
-        backlog_table.add_row(task.title, task.owner, files_str)
-    
-    console.print(backlog_table)
-    console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Your project is now fully planned, built, and ready!")
+    if os.getenv("OCEAN_SIMPLE_FEED") != "1":
+        backlog_table = Table(title="📋 Project Backlog (EXECUTED by OCEAN's Crew)")
+        backlog_table.add_column("Task", style="cyan")
+        backlog_table.add_column("Owner", style="blue")
+        backlog_table.add_column("Files", style="green")
+        for task in backlog:
+            files_str = ", ".join(task.files_touched) if task.files_touched else "None"
+            backlog_table.add_row(task.title, task.owner, files_str)
+        console.print(backlog_table)
+    else:
+        for task in backlog:
+            files_str = ", ".join(task.files_touched) if task.files_touched else "None"
+            feed(f"🌊 Ocean: Backlog — [{task.owner}] {task.title} — {files_str}")
+    if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed("🌊 Ocean: Your project is now fully planned, built, and ready!")
+    else:
+        console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Your project is now fully planned, built, and ready!")
     if runtime_summary:
         console.print(f"🔗 [green]Open: {runtime_summary}[/green]")
 
@@ -1072,21 +1304,32 @@ def deploy(dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Pr
     """Show deployment plan"""
     ensure_repo_structure()
     if dry_run:
-        console.print("\n[bold blue]🚀 Deployment Plan (Dry Run)[/bold blue]")
-        
-        plan_table = Table(title="📋 Deployment Steps")
-        plan_table.add_column("Step", style="cyan")
-        plan_table.add_column("Description", style="green")
-        
-        plan_table.add_row("1", "Build project artifacts")
-        plan_table.add_row("2", "Create Docker image")
-        plan_table.add_row("3", "Push to container registry")
-        plan_table.add_row("4", "Deploy to cloud platform")
-        plan_table.add_row("5", "Configure environment variables")
-        plan_table.add_row("6", "Verify deployment")
-        
-        console.print(plan_table)
-        console.print("\n💡 [yellow]This is a preview. Run with --no-dry-run to execute.[/yellow]")
+        if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+            feed("🌊 Ocean: Deployment Plan (Dry Run)")
+            steps = [
+                "Build project artifacts",
+                "Create Docker image",
+                "Push to container registry",
+                "Deploy to cloud platform",
+                "Configure environment variables",
+                "Verify deployment",
+            ]
+            for i, s in enumerate(steps, 1):
+                feed(f"🌊 Ocean: Deploy — Step {i}: {s}")
+            feed("💡 This is a preview. Run with --no-dry-run to execute.")
+        else:
+            console.print("\n[bold blue]🚀 Deployment Plan (Dry Run)[/bold blue]")
+            plan_table = Table(title="📋 Deployment Steps")
+            plan_table.add_column("Step", style="cyan")
+            plan_table.add_column("Description", style="green")
+            plan_table.add_row("1", "Build project artifacts")
+            plan_table.add_row("2", "Create Docker image")
+            plan_table.add_row("3", "Push to container registry")
+            plan_table.add_row("4", "Deploy to cloud platform")
+            plan_table.add_row("5", "Configure environment variables")
+            plan_table.add_row("6", "Verify deployment")
+            console.print(plan_table)
+            console.print("\n💡 [yellow]This is a preview. Run with --no-dry-run to execute.[/yellow]")
         return
     # Live deploy (local, via Docker Compose in provisioned workspace)
     spec_dict = _load_project_spec()
@@ -1350,8 +1593,8 @@ def entrypoint():
     # If no args were provided, default to invoking the `chat` command via Typer
     # so that options get parsed/injected correctly (avoids OptionInfo default).
     if len(sys.argv) == 1:
-        # Default to Codex chat for a simple, familiar chat UX.
-        sys.argv.append("codex-chat")
+        # Default to Ocean chat (combined feed)
+        sys.argv.append("chat")
     app()
 
 
@@ -1372,6 +1615,7 @@ def _run_doctor_quick(full: bool = False) -> None:
 
     # PATH check
     codex_path = shutil.which("codex")
+    table.add_row("ocean binary", shutil.which("ocean") or "(not on PATH)")
     table.add_row("codex in PATH", codex_path or "not found")
 
     # Version check

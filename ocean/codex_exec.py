@@ -9,11 +9,17 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple
 
 
+class CodexUnavailable(Exception):
+    pass
+
+
 def _codex_bin() -> Optional[str]:
     return shutil.which("codex")
 
 
 def available() -> bool:
+    if os.getenv("OCEAN_DISABLE_CODEX") in ("1", "true", "True"):
+        return False
     return _codex_bin() is not None
 
 
@@ -22,6 +28,27 @@ _last_mode: str = "unknown"  # subscription | api_fallback | unavailable
 
 def last_mode() -> str:
     return _last_mode
+
+
+def _ensure_token_env() -> None:
+    """Populate CODEX_AUTH_TOKEN in the environment if possible.
+
+    Tries a few codex subcommands to surface a token and caches it in env.
+    """
+    if os.getenv("CODEX_AUTH_TOKEN"):
+        return
+    codex = _codex_bin()
+    if not codex:
+        return
+    for args in (["auth", "print-token"], ["auth", "token"], ["auth", "--show-token"], ["auth", "export"]):
+        try:
+            tok = subprocess.run([codex, *args], capture_output=True, text=True, timeout=5)
+            cand = (tok.stdout or tok.stderr or "").strip()
+            if cand and len(cand) > 20 and "\n" not in cand:
+                os.environ["CODEX_AUTH_TOKEN"] = cand
+                break
+        except Exception:
+            continue
 
 
 def _extract_json(stdout: str) -> Optional[dict]:
@@ -42,6 +69,35 @@ def _extract_json(stdout: str) -> Optional[dict]:
 
 
 def _logged_in_via_codex() -> bool:
+    """Best-effort detection of Codex auth.
+
+    Heuristics, in order:
+    - Explicit token in env (CODEX_AUTH_TOKEN)
+    - "codex auth" output contains "logged in"/"authenticated"
+    - Able to obtain a token via one of: print-token, token, --show-token, export
+    - Legacy file at ~/.codex/auth.json exists
+    """
+    try:
+        if os.getenv("CODEX_AUTH_TOKEN"):
+            return True
+        codex = shutil.which("codex")
+        if codex:
+            out = subprocess.run([codex, "auth"], capture_output=True, text=True, timeout=5)
+            txt = (out.stdout or out.stderr or "").lower()
+            if any(kw in txt for kw in ("logged in", "authenticated", "already logged")):
+                return True
+            # Try to surface a token and cache in env
+            for args in (["auth", "print-token"], ["auth", "token"], ["auth", "--show-token"], ["auth", "export"]):
+                try:
+                    tok = subprocess.run([codex, *args], capture_output=True, text=True, timeout=5)
+                    cand = (tok.stdout or tok.stderr or "").strip()
+                    if cand and len(cand) > 20 and "\n" not in cand:
+                        os.environ["CODEX_AUTH_TOKEN"] = cand
+                        return True
+                except Exception:
+                    continue
+    except Exception:
+        pass
     home = os.path.expanduser("~")
     auth = Path(home) / ".codex" / "auth.json"
     return auth.exists()
@@ -59,7 +115,15 @@ def generate_files(
     The prompt asks for a strict JSON mapping of path->content. We attempt to
     parse various shapes from stdout and coerce to a mapping.
     """
+    force = os.getenv("OCEAN_FORCE_CODEX") in ("1", "true", "True")
+    # Best-effort ensure token is present for subprocesses
+    try:
+        _ensure_token_env()
+    except Exception:
+        pass
     if not available():
+        if force:
+            raise CodexUnavailable("Codex CLI not available")
         return None
 
     prompt_parts: list[str] = []
@@ -114,6 +178,8 @@ def generate_files(
             return None
     else:
         _last_mode = "unavailable"
+        if force:
+            raise CodexUnavailable("Codex exec returned no JSON mapping")
         return None
 
     logs_dir = Path("logs"); logs_dir.mkdir(parents=True, exist_ok=True)

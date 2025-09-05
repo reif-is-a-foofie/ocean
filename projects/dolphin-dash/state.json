@@ -1,6 +1,0 @@
-{
-  "name": "Dolphin Dash",
-  "kind": "web",
-  "runtime": "http://127.0.0.1:8000/healthz | http://127.0.0.1:5173",
-  "createdAt": "2025-09-02T19:12:20.296496"
-}

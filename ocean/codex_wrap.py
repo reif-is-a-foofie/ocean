@@ -186,6 +186,8 @@ def _post_task_snapshot_if_needed() -> None:
 def run(argv: List[str] | None = None) -> int:
     """Run a simple CLI feed with input at bottom; stream Codex + team events."""
     argv = list(argv or [])
+    # Disable CPR (cursor position requests) to avoid stray escape codes on macOS Terminal
+    os.environ.setdefault("PROMPT_TOOLKIT_NO_CPR", "1")
     codex = shutil.which("codex")
     if not codex:
         sys.stderr.write("Codex CLI not found. Install with: brew install codex\n")
@@ -246,6 +248,13 @@ def run(argv: List[str] | None = None) -> int:
     app = None
     if not stream_mode:
         app = Application(layout=layout, key_bindings=kb, full_screen=True)
+        # Extra guard: mark output as non-CPR if supported by this prompt_toolkit version
+        try:
+            out = getattr(app, "output", None)
+            if out is not None and hasattr(out, "responds_to_cpr"):
+                setattr(out, "responds_to_cpr", False)
+        except Exception:
+            pass
         # Register UI output for _append
         global _UI_OUTPUT
         _UI_OUTPUT = output

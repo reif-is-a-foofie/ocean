@@ -9,6 +9,7 @@ ocean/codex_exec.py
 ocean/codex_wrap.py
 ocean/context.py
 ocean/crewai_adapter.py
+ocean/feed.py
 ocean/mcp.py
 ocean/mcp_client.py
 ocean/models.py
@@ -25,5 +26,6 @@ ocean/tools/__init__.py
 ocean/tools/deploy.py
 ocean/tools/design_system.py
 ocean/tools/v0_cli.py
+ocean_brython-snake/snake.py
 tests/test_cli_chat.py
 tests/test_planner.py

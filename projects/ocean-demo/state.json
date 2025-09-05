@@ -1,6 +1,0 @@
-{
-  "name": "Ocean Demo",
-  "kind": "web",
-  "runtime": "http://127.0.0.1:8002/healthz | http://127.0.0.1:5173",
-  "createdAt": "2025-09-03T09:54:16.211050"
-}
