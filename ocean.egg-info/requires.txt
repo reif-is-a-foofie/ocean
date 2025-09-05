@@ -1,5 +1,6 @@
 typer[all]>=0.9.0
 rich>=13.7.0
+prompt_toolkit>=3.0.47
 fastapi>=0.111.0
 uvicorn>=0.30.0
 pytest>=8.2.0

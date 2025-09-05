@@ -6,12 +6,14 @@ ocean/agents.py
 ocean/brave_search.py
 ocean/cli.py
 ocean/codex_exec.py
+ocean/codex_wrap.py
 ocean/context.py
 ocean/crewai_adapter.py
 ocean/mcp.py
 ocean/mcp_client.py
 ocean/models.py
 ocean/planner.py
+ocean/tui_fallback.py
 ocean.egg-info/PKG-INFO
 ocean.egg-info/SOURCES.txt
 ocean.egg-info/dependency_links.txt

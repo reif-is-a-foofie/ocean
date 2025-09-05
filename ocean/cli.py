@@ -138,6 +138,21 @@ def _ensure_codex_auth() -> None:
         if "login" in txt or "not authenticated" in txt:
             console.print("[yellow]Codex auth required. Launching `codex auth login`…[/yellow]")
             subprocess.run(["codex", "auth", "login"], check=False)
+        else:
+            # Best-effort: export a token for downstream tools if available.
+            # Try a few possible subcommands to surface a token from global auth.
+            if not os.getenv("CODEX_AUTH_TOKEN"):
+                for args in (["auth", "print-token"], ["auth", "token"], ["auth", "--show-token"], ["auth", "export"]):
+                    try:
+                        tok = subprocess.run(["codex", *args], capture_output=True, text=True, timeout=5)
+                        cand = (tok.stdout or tok.stderr or "").strip()
+                        # Heuristic: token-like if long enough and not multi-line
+                        if cand and len(cand) > 20 and "\n" not in cand:
+                            os.environ["CODEX_AUTH_TOKEN"] = cand
+                            os.environ["OCEAN_CODEX_AUTH"] = "1"
+                            break
+                    except Exception:
+                        continue
     except Exception:
         pass
 
@@ -493,8 +508,9 @@ def chat(
     # Ensure project-level venv for convenience
     _ensure_root_venv()
     status = MCP.status()
-    if (not _is_test_env()) and (status.get("provider") != "codex-cli") and (os.getenv("OCEAN_MCP_ONLY", "1") not in ("0", "false", "False")):
-        console.print("[red]❌ MCP-only mode requires Codex CLI. Install via 'brew install codex' and run 'codex auth login'.[/red]")
+    # Enforce Codex-only mode by default: no Codex, no coding.
+    if (not _is_test_env()) and (status.get("provider") != "codex-cli"):
+        console.print("[red]❌ Codex CLI not detected. Install via 'brew install codex' and run 'codex auth login'.[/red]")
         raise typer.Exit(code=1)
 
     # If PRD provided, persist to docs/prd.md
@@ -1179,27 +1195,66 @@ def chat_repl():
 
 
 
-@app.command(help="Launch the Ocean TUI (Rust ratatui)")
+@app.command(help="TUI disabled — use Ocean chat instead")
 def tui():
-    """Launch the `ocean-tui` binary if available, otherwise try `cargo run`."""
+    """Deprecated: TUI has been removed to keep things simple.
+
+    Use `ocean` to launch the Ocean-branded chat and see team chatter inline.
+    """
+    console.print("[yellow]TUI is disabled.[/yellow] Use 'ocean' to chat and orchestrate.")
+    raise typer.Exit(code=0)
+
+
+@app.command(name="codex-chat", help="Start a Codex-style chat wrapped with Ocean branding (Codex required)")
+def codex_chat():
+    """Ocean-wrapped Codex chat with an Ocean banner and init/auth handled up front."""
     ensure_repo_structure()
-    # Try local built binary first
-    candidates = [
-        ROOT / "ocean-tui" / "target" / "release" / "ocean-tui",
-        ROOT / "ocean-tui" / "target" / "debug" / "ocean-tui",
-    ]
-    for bin_path in candidates:
-        if bin_path.exists():
-            console.print(f"[dim]Launching {bin_path}…[/dim]")
-            code = subprocess.call([str(bin_path)])
-            raise typer.Exit(code=code)
-    # Fallback to cargo run
-    if shutil.which("cargo"):
-        console.print("[dim]Building and launching ocean-tui via cargo…[/dim]")
-        code = subprocess.call(["cargo", "run", "--manifest-path", str(ROOT / "ocean-tui" / "Cargo.toml")])
-        raise typer.Exit(code=code)
-    console.print("[red]❌ ocean-tui not built and cargo is not available. Build with cargo to use the TUI.[/red]")
-    raise typer.Exit(code=1)
+    _load_env_file(ROOT / ".env")
+    _ensure_codex_auth()
+    # Guard: require interactive TTY for Codex chat
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        console.print("[yellow][Ocean][/yellow] Interactive chat requires a real terminal (TTY). Run in Terminal/iTerm.")
+        console.print("For diagnostics, run: ocean doctor")
+        raise typer.Exit(code=2)
+    try:
+        from .codex_wrap import run as run_wrap
+    except Exception as e:
+        console.print(f"[red]❌ Failed to load chat wrapper: {e}")
+        raise typer.Exit(code=1)
+    code = run_wrap([])
+    raise typer.Exit(code=code)
+
+
+@app.command(help="Start orchestration immediately without prompts (internal)")
+def autostart():
+    """Kick off planning and execution so chatter begins automatically.
+
+    - Builds a spec from docs/project.json or docs/prd.md or repository auto-PRD.
+    - Generates a backlog and executes it, emitting structured events.
+    """
+    ensure_repo_structure()
+    _load_env_file(ROOT / ".env")
+    # Create structured events file for the session
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    events_file = LOGS / f"events-{timestamp}.jsonl"
+    os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
+
+    # Load project spec from docs/project.json if present; otherwise synthesize from PRD or repo
+    spec_dict = _load_project_spec()
+    if not spec_dict:
+        prd = _load_prd()
+        if not prd:
+            prd = _autoprd_from_repo()
+            (DOCS / "prd.md").write_text(prd, encoding="utf-8")
+        spec_dict = _parse_prd(prd)
+        _save_project_spec(spec_dict)
+    spec = ProjectSpec.from_dict(spec_dict)
+
+    # Generate and execute backlog, which emits events as it progresses
+    backlog = generate_backlog(spec)
+    execute_backlog(backlog, DOCS, spec)
+    # No exit code significance; this is a fire-and-forget command
+    raise typer.Exit(code=0)
 
 if __name__ == "__main__":
     app()
@@ -1209,7 +1264,8 @@ def entrypoint():
     # If no args were provided, default to invoking the `chat` command via Typer
     # so that options get parsed/injected correctly (avoids OptionInfo default).
     if len(sys.argv) == 1:
-        sys.argv.append("tui")
+        # Default to Codex chat for a simple, familiar chat UX.
+        sys.argv.append("codex-chat")
     app()
 
 

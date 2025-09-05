@@ -7,6 +7,7 @@ Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 Requires-Dist: typer[all]>=0.9.0
 Requires-Dist: rich>=13.7.0
+Requires-Dist: prompt_toolkit>=3.0.47
 Requires-Dist: fastapi>=0.111.0
 Requires-Dist: uvicorn>=0.30.0
 Requires-Dist: pytest>=8.2.0
