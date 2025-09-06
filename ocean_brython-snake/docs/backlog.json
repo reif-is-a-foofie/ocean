@@ -1,0 +1,77 @@
+[
+  {
+    "title": "Design web application architecture",
+    "description": "Create frontend/backend architecture and data flow",
+    "owner": "Moroni",
+    "files_touched": [
+      "docs/architecture.md",
+      "docs/api_design.md"
+    ]
+  },
+  {
+    "title": "Create web backend",
+    "description": "Implement FastAPI backend with endpoints",
+    "owner": "Q",
+    "files_touched": [
+      "backend/app.py",
+      "backend/models.py"
+    ]
+  },
+  {
+    "title": "Create web interface design",
+    "description": "Design web-based user interface and user experience",
+    "owner": "Edna",
+    "files_touched": [
+      "ui/index.html",
+      "ui/styles.css",
+      "docs/design_system.md"
+    ]
+  },
+  {
+    "title": "Prepare codegen context",
+    "description": "Compress project context and write docs/context_summary.md",
+    "owner": "Mario",
+    "files_touched": [
+      "docs/context_summary.md"
+    ]
+  },
+  {
+    "title": "Add CI workflow",
+    "description": "Set up automated testing and quality checks",
+    "owner": "Mario",
+    "files_touched": [
+      ".github/workflows/ci.yml"
+    ]
+  },
+  {
+    "title": "Create Dockerfile",
+    "description": "Containerize application for deployment",
+    "owner": "Mario",
+    "files_touched": [
+      "Dockerfile",
+      ".dockerignore"
+    ]
+  },
+  {
+    "title": "Create deployment config",
+    "description": "Set up deployment configuration for cloud platforms",
+    "owner": "Mario",
+    "files_touched": [
+      "devops/deploy.yaml"
+    ]
+  },
+  {
+    "title": "Start local runtime",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8013/healthz | http://127.0.0.1:5173",
+    "owner": "Mario",
+    "files_touched": []
+  },
+  {
+    "title": "Run test suite and write report",
+    "description": "Execute pytest (if present) and record a concise report",
+    "owner": "Tony",
+    "files_touched": [
+      "docs/test_report.md"
+    ]
+  }
+]

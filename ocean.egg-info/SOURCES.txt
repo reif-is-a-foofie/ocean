@@ -5,6 +5,7 @@ ocean/__init__.py
 ocean/agents.py
 ocean/brave_search.py
 ocean/cli.py
+ocean/codex_client.py
 ocean/codex_exec.py
 ocean/codex_wrap.py
 ocean/context.py
@@ -15,6 +16,7 @@ ocean/mcp_client.py
 ocean/models.py
 ocean/persona.py
 ocean/planner.py
+ocean/requirements.py
 ocean/tui_fallback.py
 ocean.egg-info/PKG-INFO
 ocean.egg-info/SOURCES.txt
@@ -27,5 +29,7 @@ ocean/tools/deploy.py
 ocean/tools/design_system.py
 ocean/tools/v0_cli.py
 ocean_brython-snake/snake.py
+ocean_brython-snake/backend/app.py
+ocean_brython-snake/projects/a-browser-snake-game-built-with-vanilla-js-python/backend/app.py
 tests/test_cli_chat.py
 tests/test_planner.py

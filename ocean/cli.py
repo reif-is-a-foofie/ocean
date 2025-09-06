@@ -277,7 +277,16 @@ def _ensure_root_venv() -> None:
         _create_venv(v)
         pip = v / "bin" / "pip"
         if pip.exists():
-            subprocess.run([str(pip), "install", "-e", "."], check=False)
+            # Quiet editable install; log to logs/ if needed
+            try:
+                res = subprocess.run([str(pip), "install", "-e", "."], capture_output=True, text=True, check=False)
+                try:
+                    LOGS.mkdir(parents=True, exist_ok=True)
+                    (LOGS / "root-venv-install.log").write_text((res.stdout or "") + ("\n" + (res.stderr or "")), encoding="utf-8")
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
 
 def session_log_path() -> Path:
@@ -288,6 +297,33 @@ def session_log_path() -> Path:
 
 def feed(msg: str) -> None:
     feed_line(msg)
+
+
+def _hydrate_tokens() -> None:
+    """Make sure tokens from global locations are available to this process.
+
+    - CODEX: read ~/.codex/auth.json and export CODEX_AUTH_TOKEN if missing
+    - OPENAI: read home-level .env files (~/.env, ~/.config/ocean/.env) if present
+    """
+    try:
+        # OPENAI-style keys from home-level .env files
+        _load_env_file(Path.home() / ".env")
+        _load_env_file(Path.home() / ".config" / "ocean" / ".env")
+    except Exception:
+        pass
+    try:
+        # CODEX token from auth.json
+        if not os.getenv("CODEX_AUTH_TOKEN"):
+            auth = Path.home() / ".codex" / "auth.json"
+            if auth.exists():
+                import json as _json
+                data = _json.loads(auth.read_text(encoding="utf-8"))
+                tok = (data.get("id_token") or "").strip()
+                if tok:
+                    os.environ["CODEX_AUTH_TOKEN"] = tok
+                    os.environ["OCEAN_CODEX_AUTH"] = "1"
+    except Exception:
+        pass
 
 
 def _home_repo_root() -> Path:
@@ -611,7 +647,7 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
         return ans
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     version: Optional[bool] = typer.Option(None, "--version", help="Show version and exit", is_eager=True),
     verbose: bool = typer.Option(True, "--verbose/--quiet", help="Show detailed TUI conversations and agent steps"),
@@ -623,6 +659,9 @@ def main(
     if version:
         rprint(f"ocean {__version__}")
         raise typer.Exit(code=0)
+    # Disable Rich styling in feed mode to avoid spacing issues
+    os.environ.setdefault("RICH_NO_COLOR", "1")
+    os.environ.setdefault("RICH_DISABLE", "1")
     # Propagate verbosity to subprocess-aware modules
     os.environ["OCEAN_VERBOSE"] = "1" if verbose else "0"
     os.environ["OCEAN_ALLOW_QUESTIONS"] = "1" if ask else "0"
@@ -639,6 +678,8 @@ def main(
         os.environ.pop("OCEAN_FORCE_CODEX", None)
         # Disable CrewAI integration to keep flow simple and local
         os.environ.setdefault("OCEAN_USE_CREWAI", "0")
+        # Always refresh PRD from current repository context in feed/workspace mode
+        os.environ.setdefault("OCEAN_REFRESH_PRD", "1")
     else:
         os.environ.pop("OCEAN_SIMPLE_FEED", None)
 
@@ -659,6 +700,7 @@ def chat(
     """Main interactive conversation flow"""
     ensure_repo_structure()
     # Load environment from local .env if present (e.g., BRAVE_API_KEY)
+    _hydrate_tokens()
     _load_env_file(ROOT / ".env")
     
     # Create session log
@@ -673,9 +715,10 @@ def chat(
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
         # Skip block banner; use cheeky feed lines instead
         _ensure_codex_auth()
-        agent_say("Ocean", "Ahoy! I'm Ocean — caffeinated and ready to ship.")
-        agent_say("Ocean", f"Workspace: {Path.cwd()}")
-        agent_say("Ocean", "I’ll skim your repo, assemble the crew, and draft a plan.")
+        _auto_self_update_and_version()
+        feed("🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship.")
+        feed(f"🌊 Ocean: Workspace: {Path.cwd()}")
+        feed("🌊 Ocean: I’ll skim your repo, assemble the crew, and draft a plan.")
     else:
         # Traditional banner
         console.print(banner())
@@ -741,25 +784,21 @@ def chat(
         _do_crew(log)
         # Proceed with planning and execution, but keep Codex disabled in feed
         feed("🌊 Ocean: Creating your project plan…")
-        # Preflight Codex check (force mode)
+        # Preflight Codex check (dynamic)
         try:
             import os as _os
-            from . import codex_exec as _ce
-            if _os.getenv("OCEAN_FORCE_CODEX") in ("1", "true", "True"):
-                if not _ce.available():
-                    # Attempt auth once
-                    feed("🌊 Ocean: Attempting Codex auth…")
-                    _ensure_codex_auth()
-                if not _ce.available():
-                    feed("🌊 Ocean: ❌ Codex CLI not available. Install via 'brew install codex' and run 'codex auth login'.")
-                    raise typer.Exit(code=1)
-                # If not logged in and no API key, attempt auth then stop if still unauthenticated
-                if not getattr(_ce, "_logged_in_via_codex")() and not _os.getenv("OPENAI_API_KEY"):
-                    feed("🌊 Ocean: Attempting Codex login…")
-                    _ensure_codex_auth()
-                if not getattr(_ce, "_logged_in_via_codex")() and not _os.getenv("OPENAI_API_KEY"):
-                    feed("🌊 Ocean: ❌ Codex not authenticated. Run 'codex auth login' (or set OPENAI_API_KEY).")
-                    raise typer.Exit(code=1)
+            from . import codex_client as _cc
+            st = _cc.check()
+            if not st.ok:
+                feed("🌊 Ocean: Attempting Codex auth…")
+                _ensure_codex_auth()
+                st = _cc.check()
+            if not st.ok:
+                feed("🌊 Ocean: ❌ Codex not ready — install/login or set OPENAI_API_KEY.")
+                raise typer.Exit(code=1)
+            else:
+                mode = st.mode
+                feed(f"🌊 Ocean: Codex ready (mode: {mode}).")
         except typer.Exit:
             raise
         except Exception:
@@ -814,12 +853,20 @@ def _do_clarify(log: Path) -> None:
     ensure_repo_structure()
     
     feed("🌊 Ocean: Preparing project context…")
-    prd = _load_prd()
-    if not prd:
-        feed("🌊 Ocean: No PRD found — synthesizing from repo…")
+    prd = None
+    # Force refresh if requested (default in feed/workspace mode)
+    if os.getenv("OCEAN_REFRESH_PRD") not in ("0", "false", "False"):
+        feed("🌊 Ocean: Synthesizing PRD from repository context…")
         prd = _autoprd_from_repo()
         (DOCS/"prd.md").write_text(prd, encoding="utf-8")
-        write_log(log, "[OCEAN] PRD synthesized from repo", f"[OCEAN] PRD length: {len(prd)}")
+        write_log(log, "[OCEAN] PRD synthesized from repo (refresh)", f"[OCEAN] PRD length: {len(prd)}")
+    else:
+        prd = _load_prd()
+        if not prd:
+            feed("🌊 Ocean: No PRD found — synthesizing from repo…")
+            prd = _autoprd_from_repo()
+            (DOCS/"prd.md").write_text(prd, encoding="utf-8")
+            write_log(log, "[OCEAN] PRD synthesized from repo", f"[OCEAN] PRD length: {len(prd)}")
     if prd:
         (DOCS / "prd.md").write_text(prd, encoding="utf-8")
         write_log(log, "[OCEAN] PRD captured to docs/prd.md", f"[OCEAN] PRD length: {len(prd)}")
@@ -1126,8 +1173,32 @@ wait
     _create_venv(venv_path)
     pip = venv_path / "bin" / "pip"
     if pip.exists():
-        subprocess.run([str(pip), "install", "--upgrade", "pip"], check=False)
-        subprocess.run([str(pip), "install", "fastapi[all]", "uvicorn"], check=False)
+        # Quiet installs and write outputs to a workspace log file
+        from datetime import datetime as _dt
+        ts = _dt.now().strftime("%Y%m%d-%H%M%S")
+        wlogs = dest / "logs"
+        try:
+            wlogs.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        pip_log = wlogs / f"pip-install-{ts}.log"
+        def _pip(cmd: list[str]) -> None:
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                try:
+                    with pip_log.open("a", encoding="utf-8") as f:
+                        f.write("$ " + " ".join(cmd) + "\n")
+                        if res.stdout:
+                            f.write(res.stdout)
+                        if res.stderr:
+                            f.write("\n[stderr]\n" + res.stderr)
+                        f.write("\n")
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        _pip([str(pip), "install", "--upgrade", "pip"])
+        _pip([str(pip), "install", "fastapi[all]", "uvicorn"])
 
     # Docker assets
     (dest / ".dockerignore").write_text(
@@ -1512,6 +1583,119 @@ def autostart():
     raise typer.Exit(code=0)
 
 
+@app.command(help="Continuous build-test loop (never exits; emits events for the REPL)")
+def loop(
+    interval: int = typer.Option(30, "--interval", help="Seconds to wait between cycles (default 30)"),
+):
+    """Continuously generates a plan and executes it, emitting events each cycle.
+
+    - Re-reads docs/prd.md each cycle to adapt to changes
+    - Emits runtime URLs when available, then Tony runs tests
+    - Never exits; stop with Ctrl-C
+    """
+    ensure_repo_structure()
+    _load_env_file(ROOT / ".env")
+    # Set up a single events file for the session
+    if not os.getenv("OCEAN_EVENTS_FILE"):
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        events_file = LOGS / f"events-{timestamp}.jsonl"
+        os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
+
+    try:
+        import time as _time
+        cycle = 0
+        while True:
+            cycle += 1
+            # Load or synthesize spec per cycle
+            spec_dict = _load_project_spec()
+            if not spec_dict:
+                prd = _load_prd()
+                if not prd:
+                    prd = _autoprd_from_repo()
+                    (DOCS / "prd.md").write_text(prd, encoding="utf-8")
+                spec_dict = _parse_prd(prd)
+                _save_project_spec(spec_dict)
+            spec = ProjectSpec.from_dict(spec_dict)
+
+            # Generate and execute backlog
+            backlog = generate_backlog(spec)
+            execute_backlog(backlog, DOCS, spec)
+
+            # After execution, validate requirements if present
+            try:
+                from . import requirements as _req
+                reqs, source = _req.load_requirements(DOCS)
+            except Exception:
+                reqs, source = None, ""
+            if reqs is None:
+                # Prompt to create requirements for iterative convergence
+                _emit_event("note", agent="Tony", title="No requirements file found (docs/requirements.json or .yml). Create one to drive iteration.")
+                # Sleep then continue next cycle
+                _sleep(interval)
+                continue
+            ok, results = _req.validate(reqs)
+            report_path = _req.write_report(DOCS, results, source)
+            _emit_event("note", agent="Tony", title=f"Requirements report: {report_path}")
+
+            if ok:
+                # All requirements satisfied — wait for user input (/continue) or spec/req change
+                _emit_event("note", agent="Tony", title="All requirements satisfied. Waiting for /continue or requirements change…")
+                _wait_for_continue_or_change([DOCS / "requirements.json", DOCS / "requirements.yml", DOCS / "prd.md"])  # blocks
+            else:
+                # Not satisfied — continue iterating after a short pause
+                _sleep(interval)
+    except KeyboardInterrupt:
+        pass
+    raise typer.Exit(code=0)
+
+def _emit_event(kind: str, **data) -> None:
+    path = os.getenv("OCEAN_EVENTS_FILE")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            payload = {"event": kind, **data}
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+
+def _sleep(seconds: int) -> None:
+    import time as _t
+    try:
+        _t.sleep(max(1, int(seconds)))
+    except Exception:
+        pass
+
+def _wait_for_continue_or_change(paths: list[Path]) -> None:
+    """Block until logs/continue is touched or any of the given files change."""
+    import time as _t
+    cont = LOGS / "continue"
+    last_mtimes = {p: (p.stat().st_mtime if p.exists() else 0.0) for p in paths}
+    while True:
+        # Continue signal
+        if cont.exists():
+            try:
+                cont.unlink()
+            except Exception:
+                pass
+            _emit_event("note", agent="Ocean", title="Continue signal received; resuming iteration…")
+            return
+        # Requirements/spec change
+        changed = False
+        for p in paths:
+            try:
+                mt = p.stat().st_mtime if p.exists() else 0.0
+            except Exception:
+                mt = 0.0
+            if mt != last_mtimes.get(p, 0.0):
+                changed = True
+                last_mtimes[p] = mt
+        if changed:
+            _emit_event("note", agent="Ocean", title="Requirements/spec changed; resuming iteration…")
+            return
+        _t.sleep(1)
+
+
 @app.command(help="Run Repo-Scout: per-agent codex exec reports and Moroni synthesis")
 def scout():
     ensure_repo_structure()
@@ -1603,6 +1787,43 @@ def doctor():
     _run_doctor_quick(full=True)
 
 
+@app.command(name="self-update", help="Update Ocean package and refresh global launcher")
+def self_update():
+    """Reinstall Ocean (-e) from the home repo and refresh the /usr/local/bin/ocean symlink.
+
+    Works even when invoked from a workspace clone.
+    """
+    ensure_repo_structure()
+    repo_root = Path(__file__).resolve().parent.parent  # Home Ocean repo (contains pyproject.toml)
+    feed(f"🌊 Ocean: Updating editable install from {repo_root}…")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-e", str(repo_root)], check=True, cwd=str(repo_root))
+    except subprocess.CalledProcessError as e:
+        feed(f"🌊 Ocean: ❌ pip install failed (exit {e.returncode}).")
+        raise typer.Exit(code=e.returncode)
+    # Refresh global symlink to point at this repo's ocean-cli
+    target = repo_root / "ocean-cli"
+    global_bin = Path("/usr/local/bin/ocean")
+    try:
+        if global_bin.exists() or global_bin.parent.exists():
+            if os.access(str(global_bin.parent), os.W_OK):
+                if global_bin.exists():
+                    try:
+                        current = os.readlink(str(global_bin))
+                    except Exception:
+                        current = ""
+                else:
+                    current = ""
+                if current != str(target):
+                    os.system(f"ln -sf '{target}' '{global_bin}'")
+                    feed(f"🌊 Ocean: Global launcher updated → {global_bin}")
+            else:
+                feed("🌊 Ocean: No write access to /usr/local/bin. Run: sudo ln -sf '" + str(target) + "' '" + str(global_bin) + "'")
+    except Exception:
+        pass
+    feed("🌊 Ocean: Self-update complete.")
+
+
 def _run_doctor_quick(full: bool = False) -> None:
     """Quick environment checks.
 
@@ -1683,3 +1904,22 @@ def release(
         console.print(f"✅ [green]Release created, tagged, and pushed:[/green] {tag}")
     else:
         console.print(f"✅ [green]Release created and tagged:[/green] {tag}")
+        raise typer.Exit(code=0)
+
+def _auto_self_update_and_version() -> None:
+    """Best-effort editable reinstall from home repo and print version."""
+    try:
+        repo_root = Path(__file__).resolve().parent.parent
+        if os.getenv("OCEAN_NO_SELF_UPDATE") not in ("1", "true", "True"):
+            res = subprocess.run([sys.executable, "-m", "pip", "install", "-e", str(repo_root)], capture_output=True)
+            if res.returncode == 0:
+                feed("🌊 Ocean: self-update OK")
+            else:
+                feed("🌊 Ocean: self-update skipped (pip install error)")
+    except Exception:
+        pass
+    try:
+        from . import __version__ as _v
+        feed(f"🌊 Ocean v{_v}: starting up…")
+    except Exception:
+        pass

@@ -115,15 +115,12 @@ def exec_json(
     model = env.get(model_env, "o4-mini")
 
     # Prepare command
+    # Minimal compatible command; avoid unsupported flags
     cmd = [
         codex or "codex",
         "exec",
-        "-m",
+        "--model",
         model,
-        "--ask-for-approval",
-        env.get("OCEAN_CODEX_APPROVAL", "never"),
-        "--sandbox",
-        env.get("OCEAN_CODEX_SANDBOX", "read-only"),
     ]
 
     logs_dir = Path("logs"); logs_dir.mkdir(parents=True, exist_ok=True)
@@ -197,4 +194,3 @@ def _extract_json(stdout: str) -> Optional[dict]:
             except Exception:
                 continue
     return None
-

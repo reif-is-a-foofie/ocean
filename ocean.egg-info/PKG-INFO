@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: ocean
-Version: 0.1.0
+Version: 0.2.6
 Summary: OCEAN CLI/TUI multi-agent orchestrator
 Author: OCEAN Team
 Requires-Python: >=3.11

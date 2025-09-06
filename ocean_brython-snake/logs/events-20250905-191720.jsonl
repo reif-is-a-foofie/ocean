@@ -1,0 +1,6 @@
+{"event": "phase_start", "agent": "Moroni", "count": 1}
+{"event": "task_start", "agent": "Moroni", "title": "Design web application architecture", "intent": "Create frontend/backend architecture and data flow"}
+{"event": "task_end", "agent": "Moroni", "title": "Design web application architecture", "intent": "Create frontend/backend architecture and data flow"}
+{"event": "phase_end", "agent": "Moroni"}
+{"event": "phase_start", "agent": "Q", "count": 1}
+{"event": "task_start", "agent": "Q", "title": "Create web backend", "intent": "Implement FastAPI backend with endpoints"}

@@ -18,6 +18,24 @@ ORIG_CWD="$(pwd)"
 # Ensure virtual environment exists and is up to date
 (
   cd "$SCRIPT_DIR" || exit 1
+  # Best-effort: ensure global launcher points to this repo
+  GLOBAL_BIN="/usr/local/bin/ocean"
+  if [ -e "$GLOBAL_BIN" ]; then
+    TARGET_PATH="$(readlink "$GLOBAL_BIN" 2>/dev/null || echo '')"
+    if [ "$TARGET_PATH" != "$SCRIPT_DIR/ocean-cli" ]; then
+      if [ -w "$(dirname "$GLOBAL_BIN")" ]; then
+        ln -sf "$SCRIPT_DIR/ocean-cli" "$GLOBAL_BIN" 2>/dev/null || true
+      else
+        echo "[Ocean] Note: global 'ocean' points elsewhere ($TARGET_PATH). Use: sudo ln -sf \"$SCRIPT_DIR/ocean-cli\" \"$GLOBAL_BIN\"" >&2
+      fi
+    fi
+  else
+    if [ -w "$(dirname "$GLOBAL_BIN")" ]; then
+      ln -sf "$SCRIPT_DIR/ocean-cli" "$GLOBAL_BIN" 2>/dev/null || true
+    else
+      echo "[Ocean] Tip: install global launcher → sudo ln -sf \"$SCRIPT_DIR/ocean-cli\" \"$GLOBAL_BIN\"" >&2
+    fi
+  fi
   if [ ! -d "venv" ]; then
       echo "[Ocean] Creating virtual environment…"
       python3 -m venv venv || { echo "Failed to create venv"; exit 1; }

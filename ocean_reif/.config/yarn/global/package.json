@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@heroku-cli/plugin-pg": "^2.10.0",
+    "node-gyp": "^11.3.0"
+  }
+}

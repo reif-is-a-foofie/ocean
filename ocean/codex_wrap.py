@@ -53,6 +53,31 @@ _PHASE_ENDED: Dict[str, bool] = {}
 _ALL_DONE_POSTED: bool = False
 _UI_OUTPUT: TextArea | None = None
 
+def _typewriter_print(text: str) -> None:
+    import os, sys, time
+    tw = os.getenv("OCEAN_TYPEWRITER") in ("1", "true", "True")
+    if os.getenv("OCEAN_TEST") == "1":
+        tw = False
+    delay = 0.01
+    try:
+        delay = float(os.getenv("OCEAN_TYPEWRITER_DELAY", "0.01"))
+    except Exception:
+        pass
+    if tw and sys.stdout.isatty() and delay > 0:
+        try:
+            for ch in text:
+                sys.stdout.write(ch)
+                sys.stdout.flush()
+                if ch != "\n":
+                    time.sleep(delay)
+            if not text.endswith("\n"):
+                sys.stdout.write("\n"); sys.stdout.flush()
+            return
+        except Exception:
+            pass
+    console.print(text)
+
+
 def _append(author: str, text: str) -> None:
     msg = {
         "time": _now(),
@@ -74,7 +99,7 @@ def _append(author: str, text: str) -> None:
         except Exception:
             console.print(line + short)
     else:
-        console.print(line + short)
+        _typewriter_print(line + short)
 
 def _format_with_links(text: str) -> Text:
     # Detect URLs and style them as clickable links
@@ -238,6 +263,15 @@ def run(argv: List[str] | None = None) -> int:
                 pass
             event.app.exit(result=0)
             return
+        if text in {"/continue", ":continue", "/resume"}:
+            # Touch logs/continue to signal Ocean loop
+            try:
+                (LOGS).mkdir(parents=True, exist_ok=True)
+                (LOGS / "continue").write_text("ok", encoding="utf-8")
+                _append("Ocean", "Continue signal sent to build loop.")
+            except Exception:
+                pass
+            return
         try:
             if proc.stdin:
                 proc.stdin.write(text + "\n"); proc.stdin.flush()
@@ -334,18 +368,18 @@ def run(argv: List[str] | None = None) -> int:
     t_evt = threading.Thread(target=events_loop, daemon=True)
     t_evt.start()
 
-    # Autostart orchestration and repo-scout to begin chatter immediately (fire-and-forget)
+    # Autostart continuous orchestration and repo-scout to begin chatter immediately (fire-and-forget)
     try:
-        subprocess.Popen([sys.executable, "-m", "ocean.cli", "autostart"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Continuous loop: never exits; emits events for the REPL
+        subprocess.Popen([sys.executable, "-m", "ocean.cli", "loop"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.Popen([sys.executable, "-m", "ocean.cli", "scout"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
     try:
         if app is not None:
             return app.run()
-        # Stream mode: run briefly to validate output, then exit
-        time.sleep(3)
-        return 0
+        # Stream mode: keep running until Codex chat exits or user sends /exit
+        return proc.wait()
     finally:
         stop.set()
         try:

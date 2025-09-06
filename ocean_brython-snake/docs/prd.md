@@ -4,6 +4,7 @@
 # A Browser Snake Game Built With Vanilla ~~JS~~ Python!
 
 ## Goals
+- fastapi backend
 - static UI
 
 ## Constraints
@@ -11,4 +12,4 @@
 
 ## Detected
 - Kind: web
-- Tech: GitHub Actions
+- Tech: Dockerfile, GitHub Actions

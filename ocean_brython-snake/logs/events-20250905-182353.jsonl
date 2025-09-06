@@ -1,0 +1,25 @@
+{"event": "phase_start", "agent": "Moroni", "count": 1}
+{"event": "task_start", "agent": "Moroni", "title": "Design web application architecture", "intent": "Create frontend/backend architecture and data flow"}
+{"event": "task_end", "agent": "Moroni", "title": "Design web application architecture", "intent": "Create frontend/backend architecture and data flow"}
+{"event": "phase_end", "agent": "Moroni"}
+{"event": "phase_start", "agent": "Q", "count": 1}
+{"event": "task_start", "agent": "Q", "title": "Create web backend", "intent": "Implement FastAPI backend with endpoints"}
+{"event": "task_end", "agent": "Q", "title": "Create web backend", "intent": "Implement FastAPI backend with endpoints"}
+{"event": "phase_end", "agent": "Q"}
+{"event": "phase_start", "agent": "Edna", "count": 1}
+{"event": "task_start", "agent": "Edna", "title": "Create web interface design", "intent": "Design web-based user interface and user experience"}
+{"event": "task_end", "agent": "Edna", "title": "Create web interface design", "intent": "Design web-based user interface and user experience"}
+{"event": "phase_end", "agent": "Edna"}
+{"event": "phase_start", "agent": "Mario", "count": 5}
+{"event": "task_start", "agent": "Mario", "title": "Prepare codegen context", "intent": "Compress project context and write docs/context_summary.md"}
+{"event": "task_start", "agent": "Mario", "title": "Add CI workflow", "intent": "Set up automated testing and quality checks"}
+{"event": "task_start", "agent": "Mario", "title": "Create Dockerfile", "intent": "Containerize application for deployment"}
+{"event": "task_start", "agent": "Mario", "title": "Create deployment config", "intent": "Set up deployment configuration for cloud platforms"}
+{"event": "task_start", "agent": "Mario", "title": "Start local runtime", "intent": "Launch local backend (and UI if present) and print URL"}
+{"event": "task_end", "agent": "Mario", "title": "Prepare codegen context", "intent": "Compress project context and write docs/context_summary.md"}
+{"event": "task_end", "agent": "Mario", "title": "Add CI workflow", "intent": "Set up automated testing and quality checks"}
+{"event": "task_end", "agent": "Mario", "title": "Create Dockerfile", "intent": "Containerize application for deployment"}
+{"event": "task_end", "agent": "Mario", "title": "Create deployment config", "intent": "Set up deployment configuration for cloud platforms"}
+{"event": "task_end", "agent": "Mario", "title": "Start local runtime", "intent": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8012/healthz | http://127.0.0.1:5173"}
+{"event": "phase_end", "agent": "Mario"}
+{"event": "runtime", "agent": "Mario", "urls": ["http://127.0.0.1:8012/healthz", "http://127.0.0.1:5173"], "summary": "http://127.0.0.1:8012/healthz | http://127.0.0.1:5173"}
