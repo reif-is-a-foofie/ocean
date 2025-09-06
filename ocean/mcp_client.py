@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from queue import Queue, Empty
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 def _default_cmd() -> list[str]:

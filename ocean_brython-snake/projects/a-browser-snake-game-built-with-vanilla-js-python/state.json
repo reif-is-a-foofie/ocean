@@ -2,5 +2,5 @@
   "name": "A Browser Snake Game Built With Vanilla ~~JS~~ Python!",
   "kind": "web",
   "runtime": "http://127.0.0.1:8000/healthz | http://127.0.0.1:5173",
-  "createdAt": "2025-09-05T20:06:31.881827"
+  "createdAt": "2025-09-05T21:16:55.936649"
 }

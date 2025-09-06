@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -51,7 +50,9 @@ def load_requirements(docs_dir: Path) -> Tuple[Optional[list], str]:
 
 
 def _http_check(item: dict) -> CheckResult:
-    import urllib.request, urllib.error, time
+    import urllib.request
+    import urllib.error
+    import time
     url = item.get("url") or ""
     label = item.get("label") or f"HTTP: {url}"
     expect_status = int(item.get("expect_status", 200))
@@ -122,4 +123,3 @@ def write_report(docs_dir: Path, results: List[CheckResult], source: str) -> Pat
         lines.append(f"- {status} {r.label} — {r.detail}")
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out
-

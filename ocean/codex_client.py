@@ -115,18 +115,42 @@ def exec_json(
     env = os.environ.copy()
     if agent:
         env.setdefault("CODEX_RUN_LABEL", f"ocean:{agent}")
-    model = env.get(model_env, "o4-mini")
+    # Prepare command — advanced controls
+    use_search = os.getenv("OCEAN_CODEX_SEARCH") not in ("0", "false", "False")
+    bypass = os.getenv("OCEAN_CODEX_BYPASS_SANDBOX") in ("1", "true", "True")
+    sandbox = os.getenv("OCEAN_CODEX_SANDBOX")
+    approval = os.getenv("OCEAN_CODEX_APPROVAL")
+    profile = os.getenv("OCEAN_CODEX_PROFILE")
+    want_cd = os.getenv("OCEAN_CODEX_CD", "1") not in ("0", "false", "False")
+    skip_git = False
+    try:
+        chk = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+        if chk.returncode != 0:
+            skip_git = True
+    except Exception:
+        skip_git = True
+    cmd = [codex or "codex"]
+    if use_search:
+        cmd.append("--search")
+    if profile:
+        cmd += ["--profile", profile]
+    if want_cd:
+        cmd += ["--cd", str(Path.cwd())]
+    if skip_git:
+        cmd.append("--skip-git-repo-check")
+    cmd.append("exec")
+    if bypass:
+        cmd.append("--dangerously-bypass-approvals-and-sandbox")
+    else:
+        sb = sandbox if sandbox in ("read-only", "workspace-write", "danger-full-access") else "workspace-write"
+        cmd += ["--sandbox", sb]
+        if approval in ("untrusted", "on-failure", "on-request", "never"):
+            cmd += ["--ask-for-approval", approval]
+    # Supply prompt positionally
+    cmd.append(prompt)
 
-    # Prepare command
-    # Minimal compatible command; avoid unsupported flags
-    cmd = [
-        codex or "codex",
-        "exec",
-        "--model",
-        model,
-    ]
-
-    logs_dir = Path("logs"); logs_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
     log_file: Optional[Path] = None
     if agent:
         ts = time.strftime("%Y%m%d-%H%M%S")
@@ -139,13 +163,13 @@ def exec_json(
         try:
             proc = subprocess.run(
                 cmd,
-                input=prompt.encode("utf-8"),
                 capture_output=True,
+                text=True,
                 timeout=timeout,
                 env=env,
             )
-            stdout = (proc.stdout or b"").decode("utf-8", errors="ignore")
-            stderr = (proc.stderr or b"").decode("utf-8", errors="ignore")
+            stdout = proc.stdout or ""
+            stderr = proc.stderr or ""
             if log_file:
                 try:
                     log_file.write_text(

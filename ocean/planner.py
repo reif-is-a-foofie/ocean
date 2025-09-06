@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Optional
 import os
 
 from .agents import default_agents
 from .models import ProjectSpec, Task
-from .feed import agent_say, feed
+from .feed import agent_say
 
 
 def generate_backlog(spec: ProjectSpec) -> list[Task]:

@@ -1,11 +1,8 @@
 from __future__ import annotations
-
-import os
 from pathlib import Path
 from typing import Iterable, Optional
 
 from .models import ProjectSpec
-from . import brave_search
 
 
 DOCS = Path("docs")
@@ -67,47 +64,18 @@ def build_context_summary() -> Path:
     return out
 
 
-def brave_queries_for(spec: ProjectSpec) -> list[str]:
-    qs: list[str] = []
-    if spec.kind in ("web", "api"):
-        qs.append("FastAPI best practices 2025")
-        qs.append("GitHub Actions Python pytest example")
-    if spec.kind == "web":
-        qs.append("HTML CSS landing page accessibility checklist")
-    return qs
-
-
-def build_search_context(queries: Iterable[str]) -> Optional[Path]:
-    if not brave_search.is_configured():
-        return None
-    ensure_docs_dir()
-    out = DOCS / "search_context.md"
-    lines: list[str] = ["# Brave Search Context\n"]
-    for q in queries:
-        data = brave_search.search(q)
-        if not data:
-            continue
-        lines.append(f"\n## {q}")
-        lines.append(brave_search.summarize_results(data))
-    if len(lines) == 1:
-        return None
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return out
+# Brave Search integration removed; Codex --search handles web access when enabled
 
 
 def build_context_bundle(spec: Optional[ProjectSpec]) -> Path:
-    """Create docs/context_bundle.md by concatenating summary + search context."""
+    """Create docs/context_bundle.md.
+
+    Bundle now includes only the local context summary. Online search context is
+    delegated to Codex (--search) during codegen.
+    """
     ensure_docs_dir()
     summary = build_context_summary()
-    search_path = None
-    if spec is not None:
-        qs = brave_queries_for(spec)
-        if qs:
-            search_path = build_search_context(qs)
     bundle = DOCS / "context_bundle.md"
     parts = [summary.read_text(encoding="utf-8")]
-    if search_path and search_path.exists():
-        parts.append(search_path.read_text(encoding="utf-8"))
     bundle.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
     return bundle
-

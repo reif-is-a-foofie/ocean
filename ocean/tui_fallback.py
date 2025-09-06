@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import curses
 import json
-import os
 import threading
 import time
 from pathlib import Path
@@ -80,7 +79,7 @@ def tail_logs(st: State) -> None:
                     lines = text.splitlines()[-200:]
             except Exception:
                 lines = []
-        approvals = [l for l in lines if ("[ASK]" in l) or ("[APPROVAL]" in l)]
+        approvals = [line for line in lines if ("[ASK]" in line) or ("[APPROVAL]" in line)]
         with st.lock:
             st.logs = lines
             st.approvals = approvals
@@ -168,7 +167,7 @@ def draw(stdscr, st: State) -> None:
 
     with st.lock:
         chat = list(st.chat)[- (main_h - 2):]
-        backlog = list(st.backlog)[: (main_h - 2)]
+        # backlog is currently unused in this view; keep state for future
         queues = ["Codex Queue: idle", "Ocean Queue: idle"]
         approvals = list(st.approvals)[- (main_h - 6):]
         logs = list(st.logs)[- (logs_h - 2):]
@@ -234,9 +233,9 @@ def draw(stdscr, st: State) -> None:
     # Logs
     box(main_h + input_h, 0, logs_h, max_x, "Logs")
     y = main_h + input_h + 1
-    for l in logs:
+    for line in logs:
         try:
-            stdscr.addstr(y, 2, l[: max_x - 4])
+            stdscr.addstr(y, 2, line[: max_x - 4])
         except curses.error:
             pass
         y += 1

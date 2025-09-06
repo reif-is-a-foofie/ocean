@@ -2,38 +2,42 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from .mcp import MCP
+from . import codex_exec
+from . import context as ctx
 
 
-def _require_mcp_only() -> None:
-    if os.getenv("OCEAN_MCP_ONLY", "1") not in ("1", "true", "True"):
-        raise RuntimeError("CrewAI requires MCP-only mode. Set OCEAN_MCP_ONLY=1.")
+def _build_context_bundle() -> Path:
+    # Best-effort local context bundle; online search handled by Codex --search
+    try:
+        return ctx.build_context_bundle(None)
+    except Exception:
+        return Path("docs/context_summary.md") if (Path("docs/context_summary.md").exists()) else Path(".")
 
 
 def _codegen_files(agent_name: str, prompt: str, suggestions: Optional[List[str]] = None) -> Dict[str, str]:
-    _require_mcp_only()
-    files = MCP.codegen_files(agent_name, prompt, suggestions or [])
-    if files is None:
-        raise RuntimeError("Codex MCP did not return files (codegen_files)")
-    return files
+    bundle = _build_context_bundle()
+    files = codex_exec.generate_files(prompt, suggestions or [], bundle, agent=agent_name)
+    if not files:
+        raise RuntimeError("Codex did not return files (generate_files)")
+    return files  # type: ignore[return-value]
 
 
 def _write_file(agent_name: str, path: str, content: str) -> Dict[str, Any]:
-    _require_mcp_only()
-    from pathlib import Path
-    MCP.write_file(agent_name, Path(path), content)
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content, encoding="utf-8")
     return {"path": path, "bytes": len(content)}
 
 
 def _shell_run(agent_name: str, command: str) -> Dict[str, Any]:
-    _require_mcp_only()
-    res = MCP.shell_run(agent_name, command)
-    if res is None:
-        raise RuntimeError("Codex MCP did not execute shell command")
-    return res
+    # Minimal passthrough; prefer to avoid shell in agent tools unless explicitly desired
+    import subprocess
+    proc = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
 
 
 try:
@@ -42,7 +46,7 @@ try:
         from crewai_tools import tool as crew_tool
     except Exception:  # crewai-tools not installed
         crew_tool = None
-except Exception as e:  # pragma: no cover
+except Exception:  # pragma: no cover
     CrewAgent = None  # type: ignore
     CrewTask = None  # type: ignore
     Crew = None  # type: ignore
@@ -97,8 +101,6 @@ class CrewRunner:
         self.tools = _make_tools()
 
     def _agent(self, p: Persona) -> Any:
-        # Ensure MCP instance exists for the agent (uses same names as Ocean agents)
-        MCP.start_for_agent(p.name, Path("logs"))
         return CrewAgent(
             name=p.name,
             role=p.role,
@@ -176,4 +178,3 @@ class CrewRunner:
         crew = Crew(agents=list(team.values()), tasks=tasks, process=Process.sequential)
         result = crew.kickoff(inputs={"prd": prd_text})
         return result
-

@@ -12,7 +12,6 @@ from typing import Optional
 
 import typer
 from rich import print as rprint
-from rich.panel import Panel
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -21,12 +20,12 @@ from rich.prompt import Prompt, Confirm
 from . import __version__
 from .agents import default_agents
 from .models import ProjectSpec
-from .planner import generate_backlog, write_backlog, execute_backlog
+from .planner import generate_backlog, execute_backlog
 from .mcp import MCP
 from . import context as ctx
 from . import codex_exec
 from .persona import voice_brief
-from .feed import feed as feed_line, agent_say, you_say
+from .feed import feed as feed_line, you_say
 
 
 def _is_test_env() -> bool:
@@ -37,7 +36,26 @@ def _is_test_env() -> bool:
     return (os.getenv("OCEAN_TEST") == "1") or (os.getenv("PYTEST_CURRENT_TEST") is not None)
 
 console = Console()
+# Route all console output through the feed by default to avoid column offsets and stray ANSI
+if os.getenv("OCEAN_FEED_ONLY", "1") not in ("0", "false", "False"):
+    def _cprint_to_feed(*args, **kwargs):  # noqa: ANN001
+        try:
+            msg = " ".join(str(a) for a in args)
+        except Exception:
+            msg = " ".join(map(str, args))
+        feed(msg)
+    try:
+        console.print = _cprint_to_feed  # type: ignore[attr-defined]
+    except Exception:
+        pass
 app = typer.Typer(add_completion=False, no_args_is_help=False, help="OCEAN CLI orchestrator")
+# Sub-apps
+version_app = typer.Typer(help="Versioning utilities")
+token_app = typer.Typer(help="Token diagnostics")
+house_app = typer.Typer(help="Housekeeping and cleanup")
+app.add_typer(version_app, name="version")
+app.add_typer(token_app, name="token")
+app.add_typer(house_app, name="cleanup")
 
 ROOT = Path.cwd()
 DOCS = ROOT / "docs"
@@ -85,7 +103,8 @@ def _start_local_runtime_simple() -> Optional[str]:
 
     Returns a summary URL string or None.
     """
-    logs_dir = LOGS; logs_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir = LOGS
+    logs_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     backend_app = BACKEND / "app.py"
     backend_url = None
@@ -140,6 +159,21 @@ def _ensure_codex_auth() -> None:
     if not codex:
         return
     try:
+        # Fast-path: discover an existing token on disk before attempting any login
+        if not os.getenv("CODEX_AUTH_TOKEN"):
+            try:
+                tok = subprocess.check_output(
+                    "grep -Rho 'ey[A-Za-z0-9_\\-\\.]\\{20,\\}' ~/.codex ~/.config/codex 2>/dev/null | head -n 1",
+                    shell=True,
+                    text=True,
+                ).strip()
+                if tok:
+                    os.environ["CODEX_AUTH_TOKEN"] = tok
+                    os.environ["OCEAN_CODEX_AUTH"] = "1"
+                    feed("🌊 Ocean: Found Codex auth token via grep (masked).")
+                    return
+            except Exception:
+                pass
         # If a token already exists or CLI reports logged-in, skip active login
         try:
             from . import codex_exec as _ce
@@ -163,7 +197,8 @@ def _ensure_codex_auth() -> None:
         proc = subprocess.run(["codex", "auth", "login"], capture_output=True, text=True, timeout=45, check=False)
         # Try to extract id_token from any success URL printed
         try:
-            import re, json as _json
+            import re
+            import json as _json
             combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
             m = re.search(r"id_token=([A-Za-z0-9\-_.]+)", combined)
             if m:
@@ -171,7 +206,8 @@ def _ensure_codex_auth() -> None:
                 os.environ["CODEX_AUTH_TOKEN"] = tok
                 os.environ["OCEAN_CODEX_AUTH"] = "1"
                 # Persist a marker file for detection
-                home = Path.home() / ".codex"; home.mkdir(parents=True, exist_ok=True)
+                home = Path.home() / ".codex"
+                home.mkdir(parents=True, exist_ok=True)
                 auth_file = home / "auth.json"
                 try:
                     payload = {"id_token": tok, "updatedAt": datetime.now().isoformat(), "source": "ocean"}
@@ -182,7 +218,7 @@ def _ensure_codex_auth() -> None:
             pass
 
         # Probe status post-login
-        out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=10)
+        subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=10)
         # Best-effort: export a token for downstream tools if available.
         if not os.getenv("CODEX_AUTH_TOKEN"):
             for args in (["auth", "print-token"], ["auth", "token"], ["auth", "--show-token"], ["auth", "export"]):
@@ -299,6 +335,144 @@ def feed(msg: str) -> None:
     feed_line(msg)
 
 
+# -----------------------
+# Version bump utilities
+# -----------------------
+
+def _read_version() -> str:
+    """Read current version from pyproject.toml or ocean/__init__.py."""
+    try:
+        pj = ROOT / "pyproject.toml"
+        if pj.exists():
+            for line in pj.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("version") and "=" in line:
+                    v = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if v:
+                        return v
+    except Exception:
+        pass
+    try:
+        init = ROOT / "ocean" / "__init__.py"
+        if init.exists():
+            for line in init.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("__version__") and "=" in line:
+                    v = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if v:
+                        return v
+    except Exception:
+        pass
+    return "0.0.0"
+
+
+def _bump_semver(ver: str, part: str) -> str:
+    try:
+        major, minor, patch = [int(x) for x in ver.split(".")[:3]]
+    except Exception:
+        major, minor, patch = 0, 0, 0
+    if part == "major":
+        major += 1; minor = 0; patch = 0
+    elif part == "minor":
+        minor += 1; patch = 0
+    else:
+        patch += 1
+    return f"{major}.{minor}.{patch}"
+
+
+def _write_version(new_version: str) -> None:
+    # pyproject.toml
+    try:
+        pj = ROOT / "pyproject.toml"
+        if pj.exists():
+            lines = pj.read_text(encoding="utf-8").splitlines()
+            out = []
+            for ln in lines:
+                if ln.strip().startswith("version") and "=" in ln:
+                    out.append(f"version = \"{new_version}\"")
+                else:
+                    out.append(ln)
+            pj.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+    # ocean/__init__.py
+    try:
+        init = ROOT / "ocean" / "__init__.py"
+        if init.exists():
+            lines = init.read_text(encoding="utf-8").splitlines()
+            out = []
+            for ln in lines:
+                if ln.strip().startswith("__version__") and "=" in ln:
+                    out.append(f"__version__ = \"{new_version}\"")
+                else:
+                    out.append(ln)
+            init.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _update_changelog(new_version: str, note: str | None = None) -> None:
+    """Prepend a simple entry to CHANGELOG.md with date and optional note."""
+    path = ROOT / "CHANGELOG.md"
+    today = datetime.now().strftime("%Y-%m-%d")
+    header = f"## {new_version} — {today}\n\n"
+    body = f"- {note or 'Automated version bump to align test environment.'}\n\n"
+    try:
+        if path.exists():
+            existing = path.read_text(encoding="utf-8")
+        else:
+            existing = "# Changelog\n\n"
+        path.write_text(existing + header + body if existing.strip() == "# Changelog" else header + body + existing, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _git_commit_and_push(files: list[str], new_version: str) -> tuple[bool, str]:
+    """Commit given files and push. Returns (ok, detail)."""
+    try:
+        subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], check=True, capture_output=True)
+        subprocess.run(["git", "add", *files], check=True)
+        msg = f"chore: bump version to {new_version}"
+        subprocess.run(["git", "commit", "-m", msg], check=True)
+        # If no upstream, set it to origin/<current-branch>
+        res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], capture_output=True, text=True)
+        if res.returncode != 0:
+            branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True)
+            br = (branch.stdout or "main").strip()
+            subprocess.run(["git", "push", "-u", "origin", br], check=True)
+        else:
+            subprocess.run(["git", "push"], check=True)
+        return True, "pushed"
+    except subprocess.CalledProcessError as e:
+        return False, f"git error: {e}"
+    except Exception as e:
+        return False, f"error: {e}"
+
+
+@version_app.command("bump", help="Bump version (patch/minor/major), update changelog, commit and push.")
+def version_bump(
+    part: str = typer.Option("patch", "--part", "-p", help="Which semver part to bump", case_sensitive=False),
+    push: bool = typer.Option(True, "--push/--no-push", help="Push commit to upstream"),
+    note: str = typer.Option(None, "--note", help="Changelog note"),
+):
+    part = part.lower()
+    if part not in ("patch", "minor", "major"):
+        feed("🌊 Ocean: Invalid part; use patch|minor|major.")
+        raise typer.Exit(code=2)
+    cur = _read_version()
+    new = _bump_semver(cur, part)
+    _write_version(new)
+    _update_changelog(new, note)
+    feed(f"🌊 Ocean: Version bumped {cur} → {new}.")
+    files = ["pyproject.toml", "ocean/__init__.py", "CHANGELOG.md"]
+    if push:
+        ok, detail = _git_commit_and_push(files, new)
+        if ok:
+            feed("🌊 Ocean: Changes committed and pushed.")
+        else:
+            feed(f"🌊 Ocean: ⚠️ Push skipped/failure — {detail}.")
+    else:
+        feed("🌊 Ocean: Push disabled (use --push to enable).")
+
+
 def _hydrate_tokens() -> None:
     """Make sure tokens from global locations are available to this process.
 
@@ -344,7 +518,8 @@ def _warmup_codex(model: str | None = None, timeout: int = 25) -> None:
     - Emits one concise feed line only on failure
     """
     try:
-        import shutil, subprocess
+        import shutil
+        import subprocess
         codex = shutil.which("codex")
         if not codex:
             feed("🌊 Ocean: ❌ Codex CLI not found on PATH (warmup). Install 'codex'.")
@@ -449,6 +624,15 @@ def _prepare_workspace_from_cwd() -> None:
                     shutil.copy2(item, target)
                 except Exception:
                     pass
+        # If source has a .env and workspace lacks one, copy it (for API keys, etc.)
+        try:
+            src_env = here / ".env"
+            dst_env = dest / ".env"
+            if src_env.exists() and not dst_env.exists():
+                shutil.copy2(src_env, dst_env)
+                feed(f"🌊 Ocean: Copied .env to workspace → {dst_env}")
+        except Exception:
+            pass
         # Write marker
         (dest / ".ocean_workspace").write_text(json.dumps({"source": str(here), "createdAt": datetime.now().isoformat()}, indent=2), encoding="utf-8")
         feed(f"🌊 Ocean: Created/updated workspace at {dest} (source: {here})")
@@ -535,14 +719,14 @@ def _autoprd_from_repo() -> str:
     if readme:
         # Name from first heading or first non-empty line
         for line in readme.splitlines():
-            l = line.strip()
-            if not l:
+            line_stripped = line.strip()
+            if not line_stripped:
                 continue
-            if l.startswith("#"):
-                name = l.lstrip("# ").strip() or name
+            if line_stripped.startswith("#"):
+                name = line_stripped.lstrip("# ").strip() or name
                 break
             else:
-                summary = l
+                summary = line_stripped
                 break
         # Summary from first paragraph
         paras = [p.strip() for p in readme.split("\n\n") if p.strip()]
@@ -559,19 +743,29 @@ def _autoprd_from_repo() -> str:
         kind = "web"
 
     # Tech stack indicators
-    if (ROOT / "pyproject.toml").exists(): tech.append("Python/pyproject")
-    if (ROOT / "requirements.txt").exists(): tech.append("requirements.txt")
-    if (ROOT / "package.json").exists(): tech.append("Node/package.json")
-    if (ROOT / "Dockerfile").exists(): tech.append("Dockerfile")
-    if (ROOT / ".github" / "workflows").exists(): tech.append("GitHub Actions")
+    if (ROOT / "pyproject.toml").exists():
+        tech.append("Python/pyproject")
+    if (ROOT / "requirements.txt").exists():
+        tech.append("requirements.txt")
+    if (ROOT / "package.json").exists():
+        tech.append("Node/package.json")
+    if (ROOT / "Dockerfile").exists():
+        tech.append("Dockerfile")
+    if (ROOT / ".github" / "workflows").exists():
+        tech.append("GitHub Actions")
 
     # Goals/constraints rough
-    if "test" in readme.lower(): goals.append("testing enabled")
-    if "docker" in readme.lower(): goals.append("containerized")
+    if "test" in readme.lower():
+        goals.append("testing enabled")
+    if "docker" in readme.lower():
+        goals.append("containerized")
     compose = read_text(ROOT/"docker-compose.yml")
-    if "services:" in compose: goals.append("compose staging")
-    if "fastapi" in app_py.lower(): goals.append("fastapi backend")
-    if (ROOT/"ui").exists(): goals.append("static UI")
+    if "services:" in compose:
+        goals.append("compose staging")
+    if "fastapi" in app_py.lower():
+        goals.append("fastapi backend")
+    if (ROOT/"ui").exists():
+        goals.append("static UI")
 
     lines = [
         f"# {name}",
@@ -600,7 +794,7 @@ def _parse_prd(prd_text: str) -> dict:
     - Kind: guess from keywords (web/api/cli)
     - Goals/Constraints: look for sections or bullet lines
     """
-    lines = [l.rstrip() for l in prd_text.splitlines()]
+    lines = [line.rstrip() for line in prd_text.splitlines()]
     name = "My Project"
     description = ""
     kind = "web"
@@ -608,24 +802,24 @@ def _parse_prd(prd_text: str) -> dict:
     constraints: list[str] = []
 
     # Title
-    for i, l in enumerate(lines):
-        if not l.strip():
+    for i, line in enumerate(lines):
+        if not line.strip():
             continue
-        if l.startswith("#"):
-            name = l.lstrip("# ").strip() or name
+        if line.startswith("#"):
+            name = line.lstrip("# ").strip() or name
             start_idx = i + 1
             break
         else:
-            name = l.strip()
+            name = line.strip()
             start_idx = i + 1
             break
     else:
         start_idx = 0
 
     # One-liner
-    for l in lines[start_idx:]:
-        if l.strip():
-            description = l.strip()
+    for line in lines[start_idx:]:
+        if line.strip():
+            description = line.strip()
             break
 
     blob = prd_text.lower()
@@ -638,16 +832,18 @@ def _parse_prd(prd_text: str) -> dict:
 
     # Collect goals/constraints from sections
     current = None
-    for l in lines:
-        low = l.lower()
+    for line in lines:
+        low = line.lower()
         if low.startswith("## goals") or low.startswith("### goals"):
-            current = "goals"; continue
+            current = "goals"
+            continue
         if low.startswith("## constraints") or low.startswith("### constraints"):
-            current = "constraints"; continue
+            current = "constraints"
+            continue
         if low.startswith("## "):
             current = None
-        if l.strip().startswith("-") and current:
-            item = l.lstrip("- ").strip()
+        if line.strip().startswith("-") and current:
+            item = line.lstrip("- ").strip()
             if current == "goals":
                 goals.append(item)
             else:
@@ -806,22 +1002,28 @@ def chat(
         # Traditional banner
         console.print(banner())
         _ensure_codex_auth()
+    # Startup doctor: one-line vibes check (humor included)
+    if os.getenv("OCEAN_STARTUP_DOCTOR", "1") not in ("0", "false", "False"):
+        _doctor_lite()
     # Ocean Doctor disabled by default per user request
     MCP.ensure_started(log)
     # Ensure project-level venv for convenience
     _ensure_root_venv()
     # Warm up Codex session early so codegen runs without delays
     _warmup_codex()
-    # Hard e2e check: bail out early if exec can't run, to avoid long loops
+    # Quick e2e probe: prefer to warn rather than abort (unless strict)
     try:
         ok, detail = _codex_e2e_test(timeout=8)
     except Exception:
         ok, detail = False, "unknown error"
-    if not ok:
-        feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Run 'codex auth login' or set OPENAI_API_KEY. Aborting early.")
-        raise typer.Exit(code=2)
+    if not ok and os.getenv("OCEAN_DISABLE_CODEX") not in ("1", "true", "True"):
+        if os.getenv("OCEAN_STRICT_CODEX") in ("1", "true", "True"):
+            feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Run 'codex login' or set OPENAI_API_KEY. Aborting early.")
+            raise typer.Exit(code=2)
+        else:
+            feed(f"🌊 Ocean: ⚠️ Codex exec probe did not return JSON — {detail}. Continuing (non‑strict mode).")
     # In feed mode we require Codex for codegen phases; errors are surfaced during plan/execute
-    status = MCP.status()
+    MCP.status()
 
     # If PRD provided, persist to docs/prd.md
     if prd:
@@ -853,8 +1055,13 @@ def chat(
         console.print("[dim]OCEAN is consulting with Moroni (Architect)…[/dim]")
     _do_clarify(log)
 
-    # Optional CrewAI orchestration path
-    if (not _is_test_env()) and (os.getenv("OCEAN_USE_CREWAI", "1") not in ("0", "false", "False")):
+    # Optional CrewAI orchestration path (legacy). When OCEAN_CREWAI_BY_MORONI=1 (default),
+    # Moroni will initialize CrewAI during agent execution instead of the CLI doing it here.
+    if (
+        (not _is_test_env())
+        and (os.getenv("OCEAN_USE_CREWAI", "1") not in ("0", "false", "False"))
+        and (os.getenv("OCEAN_CREWAI_BY_MORONI", "1") in ("0", "false", "False"))
+    ):
         prd_text = _load_prd() or ""
         console.print("\n[bold blue]🌊 OCEAN:[/bold blue] CrewAI mode enabled — orchestrating agents via CrewAI while Codex writes code…")
         try:
@@ -877,26 +1084,26 @@ def chat(
         _do_crew(log)
         # Proceed with planning and execution, but keep Codex disabled in feed
         feed("🌊 Ocean: Creating your project plan…")
-        # Preflight Codex check (dynamic)
-        try:
-            import os as _os
-            from . import codex_client as _cc
-            st = _cc.check()
-            if not st.ok:
-                feed("🌊 Ocean: Attempting Codex auth…")
-                _ensure_codex_auth()
+        # Preflight Codex check (dynamic), unless explicitly disabled for tests
+        if os.getenv("OCEAN_DISABLE_CODEX") not in ("1", "true", "True"):
+            try:
+                from . import codex_client as _cc
                 st = _cc.check()
-            if not st.ok:
-                feed("🌊 Ocean: ❌ Codex not ready — install/login or set OPENAI_API_KEY.")
-                raise typer.Exit(code=1)
-            else:
-                mode = st.mode
-                feed(f"🌊 Ocean: Codex ready (mode: {mode}).")
-        except typer.Exit:
-            raise
-        except Exception:
-            # If preflight check fails unexpectedly, proceed and let execution handle errors
-            pass
+                if not st.ok:
+                    feed("🌊 Ocean: Attempting Codex auth…")
+                    _ensure_codex_auth()
+                    st = _cc.check()
+                if not st.ok:
+                    feed("🌊 Ocean: ❌ Codex not ready — install/login or set OPENAI_API_KEY.")
+                    raise typer.Exit(code=1)
+                else:
+                    mode = st.mode
+                    feed(f"🌊 Ocean: Codex ready (mode: {mode}).")
+            except typer.Exit:
+                raise
+            except Exception:
+                # If preflight check fails unexpectedly, proceed and let execution handle errors
+                pass
         try:
             _do_plan(log)
         except Exception as e:
@@ -917,7 +1124,7 @@ def chat(
 
             if _is_test_env():
                 console.print("[dim]Test mode: skipping planning and execution.[/dim]")
-                console.print(f"\n🎉 [green]OCEAN has completed your project setup![/green]")
+                console.print("\n🎉 [green]OCEAN has completed your project setup![/green]")
                 console.print(f"📝 Session log: [blue]{log}[/blue]")
                 return
 
@@ -925,13 +1132,13 @@ def chat(
             _do_plan(log)
             progress.update(task3, completed=True, description="✅ OCEAN created your plan")
     
-    console.print(f"\n🎉 [green]OCEAN has completed your project setup![/green]")
+    console.print("\n🎉 [green]OCEAN has completed your project setup![/green]")
     console.print(f"📝 Session log: [blue]{log}[/blue]")
-    console.print(f"📋 Project spec: [blue]docs/project.json[/blue]")
-    console.print(f"📋 Backlog: [blue]docs/backlog.json[/blue]")
-    console.print(f"📋 Plan: [blue]docs/plan.md[/blue]")
-    console.print(f"\n🌊 [bold blue]OCEAN:[/bold blue] Your AI engineering team is ready!")
-    console.print(f"💡 Tip: Use 'ocean provision' to create an isolated workspace under 'projects/'.")
+    console.print("📋 Project spec: [blue]docs/project.json[/blue]")
+    console.print("📋 Backlog: [blue]docs/backlog.json[/blue]")
+    console.print("📋 Plan: [blue]docs/plan.md[/blue]")
+    console.print("\n🌊 [bold blue]OCEAN:[/bold blue] Your AI engineering team is ready!")
+    console.print("💡 Tip: Use 'ocean provision' to create an isolated workspace under 'projects/'.")
 
     # Auto-stage by default using Docker Compose (fallback to local runtime inside deploy)
     try:
@@ -1087,7 +1294,7 @@ def _do_plan(log: Path) -> None:
         feed("🌊 Ocean: Now let me coordinate my crew to create your project plan…")
         feed("🌊 Ocean: Moroni, Q, Edna, and Mario are analyzing your requirements…")
     else:
-        console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Now let me coordinate my crew to create your project plan...")
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Now let me coordinate my crew to create your project plan...")
         console.print("[bold blue]🌊 OCEAN:[/bold blue] Moroni, Q, Edna, and Mario are analyzing your requirements...")
     
     # Generate backlog from agent proposals
@@ -1097,7 +1304,7 @@ def _do_plan(log: Path) -> None:
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
         feed("🌊 Ocean: My crew is now EXECUTING your project tasks…")
     else:
-        console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] My crew is now EXECUTING your project tasks...")
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] My crew is now EXECUTING your project tasks...")
     bj, pm, runtime_summary = execute_backlog(backlog, DOCS, spec)
     
     write_log(log, f"[OCEAN] Crew completed planning and execution: {bj}")
@@ -1109,7 +1316,7 @@ def _do_plan(log: Path) -> None:
         if runtime_summary:
             feed(f"🌊 Ocean: Local runtime: {runtime_summary}")
     else:
-        console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Excellent! My crew has created AND BUILT your project!")
+        console.print("✅ [bold blue]🌊 OCEAN:[/bold blue] Excellent! My crew has created AND BUILT your project!")
         console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Backlog: {bj}")
         console.print(f"✅ [bold blue]🌊 OCEAN:[/bold blue] Plan summary: {pm}")
         if runtime_summary:
@@ -1133,7 +1340,7 @@ def _do_plan(log: Path) -> None:
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
         feed("🌊 Ocean: Your project is now fully planned, built, and ready!")
     else:
-        console.print(f"\n[bold blue]🌊 OCEAN:[/bold blue] Your project is now fully planned, built, and ready!")
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Your project is now fully planned, built, and ready!")
     if runtime_summary:
         console.print(f"🔗 [green]Open: {runtime_summary}[/green]")
 
@@ -1424,7 +1631,7 @@ def run(host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
         write_log(log, "[OCEAN] Server run failed: No backend app found")
         raise typer.Exit(code=1)
 
-    console.print(f"[bold blue]🌊 OCEAN:[/bold blue] Starting your generated backend server...")
+    console.print("[bold blue]🌊 OCEAN:[/bold blue] Starting your generated backend server...")
     console.print(f"🌐 Backend: http://{host}:{port}")
 
     if serve_ui:
@@ -1698,7 +1905,7 @@ def loop(
     except Exception:
         ok, detail = False, "unknown error"
     if not ok:
-        feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Waiting for auth/key… (retrying)")
+        feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Waiting for auth/key… (retrying). Try 'codex login'.")
         # Retry loop: wait in short intervals until available
         import time as _t
         for _ in range(6):  # ~48s total
@@ -1720,7 +1927,7 @@ def loop(
         os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
 
     try:
-        import time as _time
+        # removing unused time import
         cycle = 0
         while True:
             cycle += 1
@@ -1826,7 +2033,8 @@ def _codex_debug_probe(verbose: bool = False) -> None:
     except Exception as e:
         feed(f"🌊 Ocean: ❌ Codex probe failed: {e}")
         return
-    import shutil, subprocess
+    import shutil
+    import subprocess
     codex_path = shutil.which("codex") or "(not found)"
     version = "(n/a)"
     if shutil.which("codex"):
@@ -1896,7 +2104,9 @@ def scout():
         files = codex_exec.generate_files(instruction, [str(out_path.relative_to(Path.cwd()))], bundle, agent=agent)
         if files:
             for rel, content in files.items():
-                p = Path(rel); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(content, encoding="utf-8")
+                p = Path(rel)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding="utf-8")
             emit("task_start", agent=agent, title=f"Repo-scout: {scope}", intent=task)
             emit("task_end", agent=agent, title=f"Repo-scout: {scope}", intent=task)
             emit("note", agent=agent, title=f"Report: {out_path}")
@@ -1921,7 +2131,9 @@ def scout():
         files = codex_exec.generate_files(instruction, [str(synth_path)], tmp, agent="Moroni")
         if files:
             for rel, content in files.items():
-                p = Path(rel); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(content, encoding="utf-8")
+                p = Path(rel)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding="utf-8")
             emit("note", agent="Moroni", title=f"Synthesis: {synth_path}")
     except Exception:
         pass
@@ -2014,11 +2226,11 @@ def _run_doctor_quick(full: bool = False) -> None:
             out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=5)
             txt = (out.stdout or out.stderr).strip()
             if "login" in txt.lower():
-                auth = "use 'codex auth login' if needed"
+                auth = "use 'codex login' if needed"
             else:
                 auth = txt or "ok"
         except Exception:
-            auth = "run 'codex auth login'"
+            auth = "run 'codex login'"
     table.add_row("codex auth", auth)
 
     # Optional end-to-end exec test (fast, token-free if subscription)
@@ -2036,24 +2248,82 @@ def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str]:
 
     Sends a trivial instruction asking for `{}` JSON; returns (ok, detail).
     """
-    import shutil, subprocess, json as _json, os as _os
+    import shutil
+    import subprocess
+    import json as _json
+    import os as _os
     codex = shutil.which("codex")
     if not codex:
         return False, "codex not found"
-    model = _os.getenv("OCEAN_CODEX_MODEL", "o4-mini")
     prompt = "Return ONLY JSON object {}."
     try:
-        proc = subprocess.run([codex, "exec", "--model", model], input=prompt.encode("utf-8"), capture_output=True, timeout=timeout)
-        out = (proc.stdout or b"").decode("utf-8", errors="ignore")
-        err = (proc.stderr or b"").decode("utf-8", errors="ignore")
+        # Defaults: search ON; sandbox ON (workspace-write); bypass only if explicitly enabled
+        use_search = _os.getenv("OCEAN_CODEX_SEARCH") not in ("0", "false", "False")
+        bypass = _os.getenv("OCEAN_CODEX_BYPASS_SANDBOX") in ("1", "true", "True")
+        sandbox = _os.getenv("OCEAN_CODEX_SANDBOX")
+        approval = _os.getenv("OCEAN_CODEX_APPROVAL")
+        profile = _os.getenv("OCEAN_CODEX_PROFILE")
+        want_cd = _os.getenv("OCEAN_CODEX_CD", "1") not in ("0", "false", "False")
+        # detect git repo
+        skip_git = False
+        try:
+            _g = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+            if _g.returncode != 0:
+                skip_git = True
+        except Exception:
+            skip_git = True
+        cmd = [codex]
+        if use_search:
+            cmd.append("--search")
+        if profile:
+            cmd += ["--profile", profile]
+        if want_cd:
+            cmd += ["--cd", str(Path.cwd())]
+        if skip_git:
+            cmd.append("--skip-git-repo-check")
+        cmd.append("exec")
+        if bypass:
+            cmd.append("--dangerously-bypass-approvals-and-sandbox")
+        else:
+            sb = sandbox if sandbox in ("read-only", "workspace-write", "danger-full-access") else "workspace-write"
+            cmd += ["--sandbox", sb]
+            if approval in ("untrusted", "on-failure", "on-request", "never"):
+                cmd += ["--ask-for-approval", approval]
+        # Prefer faster success detection with --output-last-message
+        last_path = LOGS / "codex-test-last.txt"
+        cmd += ["--output-last-message", str(last_path)]
+        cmd.append(prompt)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        out = proc.stdout or ""
+        err = proc.stderr or ""
+        # Try direct JSON, then liberal extraction to tolerate banners/headers
         try:
             obj = _json.loads(out)
         except Exception:
-            obj = None
+            try:
+                from .codex_exec import _extract_json as _x
+                obj = _x(out)
+            except Exception:
+                obj = None
+        if not isinstance(obj, dict) and last_path.exists():
+            try:
+                lm = last_path.read_text(encoding="utf-8")
+                obj = _json.loads(lm)
+            except Exception:
+                pass
         if isinstance(obj, dict):
-            return True, f"ok (model: {model})"
-        head = (err or out or "").strip().splitlines()[:1]
-        return False, (head[0] if head else "no output")
+            return True, "ok"
+        # Produce a more actionable failure string for doctor table and early abort
+        rc = proc.returncode
+        head_err = (err.strip().splitlines()[:8]) if err.strip() else []
+        head_out = (out.strip().splitlines()[:8]) if out.strip() else []
+        # Mask prompt (last arg)
+        _cmd = list(cmd)
+        if _cmd:
+            _cmd = _cmd[:-1] + ["…PROMPT…"]
+        cmd_repr = " ".join(_cmd)
+        detail = f"rc={rc}; cmd={cmd_repr}; err={' | '.join(head_err)}; out={' | '.join(head_out)}"
+        return False, detail
     except subprocess.TimeoutExpired:
         return False, "timeout"
     except Exception as e:
@@ -2070,6 +2340,168 @@ def codex_test():
     else:
         feed(f"🌊 Ocean: ❌ Codex E2E failed: {detail}")
         raise typer.Exit(code=1)
+
+
+@house_app.command("scan", help="List old/unused files and directories Ocean can remove")
+def cleanup_scan():
+    candidates = []
+    # Old generated projects
+    for p in [ROOT / "ocean_brython-snake", ROOT / "projects" / "ocean---multi-agent-software-engineering-orchestrator"]:
+        if p.exists():
+            candidates.append(("dir", p))
+    # Legacy brave search module
+    for p in [ROOT / "ocean" / "brave_search.py"]:
+        if p.exists():
+            candidates.append(("file", p))
+    # Old TUI proto (if not actively used)
+    if not os.getenv("OCEAN_KEEP_TUI"):
+        p = ROOT / "ocean-tui"
+        if p.exists():
+            candidates.append(("dir", p))
+    # CrewAI adapter (if disabled)
+    if os.getenv("OCEAN_USE_CREWAI") in (None, "0", "false", "False"):
+        p = ROOT / "ocean" / "crewai_adapter.py"
+        if p.exists():
+            candidates.append(("file", p))
+    # scripts/ traces
+    p = ROOT / "scripts" / "mcp_trace.py"
+    if p.exists():
+        candidates.append(("file", p))
+    if not candidates:
+        feed("🧹 Cleanup: Nothing obvious to remove. Ship shape!")
+        return
+    feed("🧹 Cleanup candidates:")
+    for kind, path in candidates:
+        feed(f" - {kind}: {path}")
+
+
+@house_app.command("apply", help="Remove files/dirs found by cleanup scan (dangerous; no undo)")
+def cleanup_apply():
+    removed = 0
+    errors = 0
+    import shutil as _sh
+    def _rm(p: Path) -> bool:
+        try:
+            if p.is_dir():
+                _sh.rmtree(p)
+            elif p.exists():
+                p.unlink()
+            return True
+        except Exception as e:
+            feed(f"🧹 Cleanup: failed to remove {p} — {e}")
+            return False
+    # Same list as scan
+    targets: list[Path] = []
+    for p in [ROOT / "ocean_brython-snake",
+              ROOT / "projects" / "ocean---multi-agent-software-engineering-orchestrator",
+              ROOT / "ocean" / "brave_search.py",
+              ROOT / "scripts" / "mcp_trace.py"]:
+        if p.exists():
+            targets.append(p)
+    if os.getenv("OCEAN_USE_CREWAI") in (None, "0", "false", "False"):
+        p = ROOT / "ocean" / "crewai_adapter.py"
+        if p.exists():
+            targets.append(p)
+    if not os.getenv("OCEAN_KEEP_TUI"):
+        p = ROOT / "ocean-tui"
+        if p.exists():
+            targets.append(p)
+    if not targets:
+        feed("🧹 Cleanup: Nothing to remove. The deck is spotless.")
+        return
+    for p in targets:
+        ok = _rm(p)
+        if ok:
+            removed += 1
+    feed(f"🧹 Cleanup: removed {removed} item(s). {('No mishaps.' if errors==0 else f'Errors: {errors}.')} Arrr!")
+
+
+def _doctor_lite() -> None:
+    """Print one-line startup diagnostics with light humor and no tables."""
+    try:
+        feed(f"🤿 Doctor: ocean {__version__} @ {Path.cwd()}")
+        # codex path/version
+        cpath = shutil.which("codex") or "(not found)"
+        try:
+            cv = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
+            cver = (cv.stdout or cv.stderr or "").strip().splitlines()[:1]
+            feed(f"🤿 Doctor: codex={cpath} ver={(cver[0] if cver else 'n/a')} (splash!)")
+        except Exception:
+            feed(f"🤿 Doctor: codex={cpath} (bring floaties)")
+        # token status
+        tok = os.getenv("CODEX_AUTH_TOKEN") or ""
+        src = os.getenv("OCEAN_CODEX_TOKEN_SOURCE") or "-"
+        tshort = (tok[:6] + "…" + tok[-6:]) if len(tok) >= 16 else ("(set)" if tok else "(none)")
+        feed(f"🤿 Doctor: token={'yes' if tok else 'no'} src={src} preview={tshort}")
+        # sandbox/search/profile snapshot
+        search = os.getenv("OCEAN_CODEX_SEARCH", "0")
+        bypass = os.getenv("OCEAN_CODEX_BYPASS_SANDBOX", "1")
+        sb = os.getenv("OCEAN_CODEX_SANDBOX") or ("bypass" if bypass not in ("0","false","False") else "(default)")
+        ap = os.getenv("OCEAN_CODEX_APPROVAL") or "(default)"
+        prof = os.getenv("OCEAN_CODEX_PROFILE") or "(none)"
+        feed(f"🤿 Doctor: search={'on' if search in ('1','true','True') else 'off'} sandbox={sb} approval={ap} profile={prof}")
+        # exec probe
+        ok, detail = _codex_e2e_test(timeout=8)
+        feed(f"🤿 Doctor: exec={'ok' if ok else 'nope'} — {detail if detail else 'no details'}")
+        # CrewAI status
+        enabled = os.getenv("OCEAN_USE_CREWAI", "1") not in ("0", "false", "False")
+        try:
+            import importlib
+            importlib.import_module("crewai")
+            installed = True
+        except Exception:
+            installed = False
+        feed(f"🤿 Doctor: crewai={'enabled' if enabled else 'disabled'}, installed={'yes' if installed else 'no'} — backbone ready? {'aye' if (enabled and installed) else 'nay'}")
+    except Exception as e:
+        feed(f"🤿 Doctor: hiccup — {e}")
+
+
+@token_app.command("doctor", help="Diagnose Codex token: presence, source, expiry, and CLI auth state")
+def token_doctor():
+    tab = Table(title="🔑 Codex Token Doctor")
+    tab.add_column("Field", style="cyan")
+    tab.add_column("Value", style="green")
+    tok = os.getenv("CODEX_AUTH_TOKEN") or ""
+    src = os.getenv("OCEAN_CODEX_TOKEN_SOURCE") or "(unknown)"
+    length = len(tok)
+    preview = (tok[:6] + "…" + tok[-6:]) if length >= 16 else ("(set)" if tok else "(none)")
+    # Decode exp
+    exp_str = "(unknown)"
+    expired = "(unknown)"
+    try:
+        parts = tok.split(".")
+        if len(parts) >= 2:
+            import base64, json as _json
+            pad = '=' * (-len(parts[1]) % 4)
+            data = base64.urlsafe_b64decode(parts[1] + pad)
+            obj = _json.loads(data.decode("utf-8", errors="ignore"))
+            exp = obj.get("exp")
+            if isinstance(exp, (int, float)):
+                from datetime import datetime as _dt
+                dt = _dt.fromtimestamp(exp)
+                exp_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                expired = "yes" if dt < _dt.now() else "no"
+    except Exception:
+        pass
+    # codex auth snapshot
+    codex_path = shutil.which("codex") or "(not found)"
+    auth_head = "(n/a)"
+    if shutil.which("codex"):
+        try:
+            out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=8)
+            lines = (out.stdout or out.stderr or "").strip().splitlines()[:3]
+            auth_head = " | ".join(s.strip() for s in lines) or "(no output)"
+        except Exception as e:
+            auth_head = f"error: {e}"
+    tab.add_row("token present", "yes" if tok else "no")
+    tab.add_row("token length", str(length))
+    tab.add_row("token preview", preview)
+    tab.add_row("token source", src)
+    tab.add_row("token exp", exp_str)
+    tab.add_row("token expired", expired)
+    tab.add_row("codex path", codex_path)
+    tab.add_row("codex auth", auth_head)
+    console.print(tab)
 
 
 @app.command(help="Create a release commit and tag (Mario)")
@@ -2099,7 +2531,7 @@ def release(
             raise typer.Exit(code=code)
     if push:
         if os.getenv("OCEAN_ALLOW_QUESTIONS", "1") not in ("0", "false", "False"):
-            if not Confirm.ask(f"Push to 'origin' with --follow-tags?", default=True):
+            if not Confirm.ask("Push to 'origin' with --follow-tags?", default=True):
                 console.print("[yellow]Push skipped by user.[/yellow]")
                 console.print(f"✅ [green]Release created and tagged:[/green] {tag}")
                 raise typer.Exit(code=0)

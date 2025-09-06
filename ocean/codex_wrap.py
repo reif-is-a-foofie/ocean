@@ -11,8 +11,6 @@ from datetime import datetime
 
 from rich.console import Console
 from rich.text import Text
-from prompt_toolkit import PromptSession
-from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.key_binding import KeyBindings
@@ -54,24 +52,48 @@ _ALL_DONE_POSTED: bool = False
 _UI_OUTPUT: TextArea | None = None
 
 def _typewriter_print(text: str) -> None:
-    import os, sys, time
-    tw = os.getenv("OCEAN_TYPEWRITER") in ("1", "true", "True")
+    import os
+    import sys
+    import time
+    tw_env = os.getenv("OCEAN_TYPEWRITER")
+    tw = True if tw_env is None else (tw_env in ("1", "true", "True"))
     if os.getenv("OCEAN_TEST") == "1":
         tw = False
-    delay = 0.01
+    delay = 0.025
     try:
-        delay = float(os.getenv("OCEAN_TYPEWRITER_DELAY", "0.01"))
+        delay = float(os.getenv("OCEAN_TYPEWRITER_DELAY", "0.025"))
     except Exception:
         pass
+    human = os.getenv("OCEAN_TYPEWRITER_HUMAN", "1") not in ("0", "false", "False")
+    var = float(os.getenv("OCEAN_TW_VARIANCE", "0.6"))
+    punct_mult = float(os.getenv("OCEAN_TW_PUNCT_MULT", "4.0"))
+    comma_mult = float(os.getenv("OCEAN_TW_COMMA_MULT", "2.0"))
+    space_mult = float(os.getenv("OCEAN_TW_SPACE_MULT", "0.3"))
+    max_delay = float(os.getenv("OCEAN_TW_MAX_DELAY", "0.12"))
     if tw and sys.stdout.isatty() and delay > 0:
         try:
             for ch in text:
                 sys.stdout.write(ch)
                 sys.stdout.flush()
                 if ch != "\n":
-                    time.sleep(delay)
+                    if human:
+                        mult = 1.0
+                        if ch == ' ':
+                            mult = space_mult
+                        elif ch in '.!?':
+                            mult = punct_mult
+                        elif ch in ',;:':
+                            mult = comma_mult
+                        import random as _rand
+                        jitter = 1.0 + _rand.uniform(-var, var)
+                        d = min(max(delay * mult * jitter, 0.0), max_delay)
+                        if d > 0:
+                            time.sleep(d)
+                    else:
+                        time.sleep(delay)
             if not text.endswith("\n"):
-                sys.stdout.write("\n"); sys.stdout.flush()
+                sys.stdout.write("\n")
+                sys.stdout.flush()
             return
         except Exception:
             pass
@@ -258,7 +280,8 @@ def run(argv: List[str] | None = None) -> int:
         if text in {"/exit", ":q", ":quit", ":exit"}:
             try:
                 if proc.stdin:
-                    proc.stdin.write("/exit\n"); proc.stdin.flush()
+                    proc.stdin.write("/exit\n")
+                    proc.stdin.flush()
             except Exception:
                 pass
             event.app.exit(result=0)
@@ -274,7 +297,8 @@ def run(argv: List[str] | None = None) -> int:
             return
         try:
             if proc.stdin:
-                proc.stdin.write(text + "\n"); proc.stdin.flush()
+                proc.stdin.write(text + "\n")
+                proc.stdin.flush()
         except Exception:
             event.app.exit(result=0)
 

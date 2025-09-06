@@ -3,7 +3,6 @@ from typing import Iterable, List
 import subprocess
 import sys
 import os
-import json
 import socket
 import shutil
 from datetime import datetime
@@ -12,11 +11,39 @@ from pathlib import Path
 from .models import ProjectSpec, Task
 from .tools.design_system import DESIGN_METHOD
 from .tools.v0_cli import V0Cli
-from .tools.deploy import RenderDeployPlan
 from .mcp import MCP
 from . import context as ctx
 from .persona import voice_brief
 from . import codex_exec
+
+
+def _context_msg(bundle: Path, docs_dir: Path = Path("docs")) -> str:
+    try:
+        size_kb = bundle.stat().st_size / 1024.0
+    except Exception:
+        size_kb = 0.0
+    prd = (docs_dir / "prd.md").exists()
+    search = (docs_dir / "search_context.md").exists()
+    qn = 0
+    try:
+        if search:
+            txt = (docs_dir / "search_context.md").read_text(encoding="utf-8")
+            qn = sum(1 for line in txt.splitlines() if line.startswith("## "))
+    except Exception:
+        qn = 0
+    # quick file count (shallow) for signal
+    roots = [Path("backend"), Path("ui"), Path("devops"), docs_dir]
+    try:
+        files = 0
+        for r in roots:
+            if not r.exists():
+                continue
+            for p in r.rglob("*"):
+                if p.is_file() and p.suffix in {".py", ".md", ".json", ".yml", ".yaml", ".html", ".css"}:
+                    files += 1
+    except Exception:
+        files = 0
+    return f'Context prepared — bundle={bundle} ({size_kb:.1f} KB), files={files}, PRD={"yes" if prd else "no"}, search={"yes" if search else "no"}{f" ({qn} queries)" if qn else ""}.'
 
 
 @dataclass
@@ -110,7 +137,34 @@ class Moroni(AgentBase):
             ]
 
     def execute(self, tasks: Iterable[Task], spec: ProjectSpec) -> List[Task]:
-        """Moroni orchestrates the execution using Codex MCP"""
+        """Moroni ensures CrewAI backbone is up, then orchestrates execution."""
+        # Moroni verifies/initializes CrewAI if enabled
+        use_crewai = os.getenv("OCEAN_USE_CREWAI", "1") not in ("0", "false", "False")
+        by_moroni = os.getenv("OCEAN_CREWAI_BY_MORONI", "1") not in ("0", "false", "False")
+        if use_crewai and by_moroni:
+            from .feed import agent_say as _say
+            try:
+                # Check installation early
+                import importlib
+                importlib.import_module("crewai")
+                _say("Moroni", '"CrewAI detected. Initializing the crew…"')
+                # Run CrewAI backbone with current PRD
+                prd_text = ""
+                p = Path("docs/prd.md")
+                if p.exists():
+                    try:
+                        prd_text = p.read_text(encoding="utf-8")
+                    except Exception:
+                        prd_text = ""
+                from .crewai_adapter import CrewRunner
+                runner = CrewRunner()
+                runner.run_project(prd_text)
+                _say("Moroni", '"CrewAI run completed. Proceeding with agent tasks."')
+            except ModuleNotFoundError:
+                _say("Moroni", '"⚠️ CrewAI not installed. Install `crewai` and `crewai-tools` or set OCEAN_USE_CREWAI=0."')
+            except Exception as e:
+                _say("Moroni", f'"❌ CrewAI initialization failed — {e}. Falling back to direct agents."')
+        # Keep stub MCP log for compatibility
         MCP.start_for_agent(self.name, Path("logs"))
         executed = []
         for task in tasks:
@@ -134,7 +188,7 @@ class Moroni(AgentBase):
             verbose = os.getenv("OCEAN_VERBOSE", "1") not in ("0", "false", "False")
             if verbose:
                 from .feed import agent_say as _say
-                _say("Q", '"Context prepared."')
+                _say("Q", f'"{_context_msg(bundle)}"')
             prd_text = ""
             p = Path("docs/prd.md")
             if p.exists():
@@ -156,7 +210,6 @@ class Moroni(AgentBase):
             instruction = instruction + "\nVoice guidance: " + voice_brief(self.name, context="planning")
             files = codex_exec.generate_files(instruction, ["docs/architecture.md"], bundle, agent=self.name)
             if files:
-                from .codex_exec import last_mode
                 for rel, content in files.items():
                     Path(rel).parent.mkdir(parents=True, exist_ok=True)
                     Path(rel).write_text(content, encoding="utf-8")
@@ -341,7 +394,7 @@ class CLIInterface:
             verbose = os.getenv("OCEAN_VERBOSE", "1") not in ("0", "false", "False")
             if verbose:
                 from .feed import agent_say as _say
-                _say("Edna", '"Context prepared."')
+                _say("Q", f'"{_context_msg(bundle)}"')
             prd_text = ""
             p = Path("docs/prd.md")
             if p.exists():
@@ -356,10 +409,13 @@ class CLIInterface:
             )
             if verbose:
                 from .feed import agent_say as _say
-                _say("Q", '"Using prepared context bundle."')
+                try:
+                    kb = bundle.stat().st_size / 1024.0
+                except Exception:
+                    kb = 0.0
+                _say("Q", f'"Using context bundle {bundle} ({kb:.1f} KB)."')
             files = codex_exec.generate_files(instruction, ["backend/app.py"], bundle, agent=self.name)
             if files:
-                from .codex_exec import last_mode
                 for rel, content in files.items():
                     Path(rel).parent.mkdir(parents=True, exist_ok=True)
                     Path(rel).write_text(content, encoding="utf-8")
@@ -389,12 +445,22 @@ class CLIInterface:
 
         # No local fallback
         from .feed import agent_say as _say
-        _say("Q", '"❌ Codegen unavailable (no subscription or API). Skipping backend until Codex/API is ready."')
+        try:
+            from .codex_exec import last_error as _last_err  # type: ignore
+            detail = _last_err() or "unavailable"
+        except Exception:
+            detail = "unavailable"
+        _say("Q", f'"❌ Codegen failed — {detail}."')
 
     def _generate_generic_backend(self, spec: ProjectSpec):
         """No local fallback; require Codex/API for generic backend."""
         from .feed import agent_say as _say
-        _say("Q", '"❌ Codegen unavailable (no subscription or API). Skipping generic backend until Codex/API is ready."')
+        try:
+            from .codex_exec import last_error as _last_err  # type: ignore
+            detail = _last_err() or "unavailable"
+        except Exception:
+            detail = "unavailable"
+        _say("Q", f'"❌ Codegen failed — {detail}."')
 
 
 class Edna(AgentBase):
@@ -515,7 +581,8 @@ Generated by OCEAN using Codex MCP
             verbose = os.getenv("OCEAN_VERBOSE", "1") not in ("0", "false", "False")
             if verbose:
                 from .feed import agent_say as _say
-                _say("Edna", '"Context prepared."')
+                # Reuse Moroni's context message helper
+                _say("Edna", f'"{_context_msg(bundle)}"')
             prd_text = ""
             p = Path("docs/prd.md")
             if p.exists():
@@ -533,7 +600,6 @@ Generated by OCEAN using Codex MCP
             instruction = instruction + "\nVoice guidance (copy tone only): " + voice_brief(self.name, context="design")
             files = codex_exec.generate_files(instruction, ["ui/index.html", "ui/styles.css"], bundle, agent=self.name)
             if files:
-                from .codex_exec import last_mode
                 for rel, content in files.items():
                     Path(rel).parent.mkdir(parents=True, exist_ok=True)
                     Path(rel).write_text(content, encoding="utf-8")
@@ -564,12 +630,22 @@ Generated by OCEAN using Codex MCP
 
         # No local fallback
         from .feed import agent_say as _say
-        _say("Edna", '"❌ Codegen unavailable (no subscription or API). Skipping UI until Codex/API is ready."')
+        try:
+            from .codex_exec import last_error as _last_err  # type: ignore
+            detail = _last_err() or "unavailable"
+        except Exception:
+            detail = "unavailable"
+        _say("Edna", f'"❌ Codegen failed — {detail}."')
 
     def _generate_generic_design(self, spec: ProjectSpec):
         """No local fallback; require Codex/API for generic design."""
         from .feed import agent_say as _say
-        _say("Edna", '"❌ Codegen unavailable (no subscription or API). Skipping design until Codex/API is ready."')
+        try:
+            from .codex_exec import last_error as _last_err  # type: ignore
+            detail = _last_err() or "unavailable"
+        except Exception:
+            detail = "unavailable"
+        _say("Edna", f'"❌ Codegen failed — {detail}."')
 
 
 class Mario(AgentBase):
@@ -660,7 +736,8 @@ class Mario(AgentBase):
         - samples of backend/ui/docs files
         """
         root = Path('.')
-        docs = Path('docs'); docs.mkdir(exist_ok=True)
+        docs = Path('docs')
+        docs.mkdir(exist_ok=True)
         out = docs / 'context_summary.md'
         lines: list[str] = []
         def add_file(label: str, p: Path, limit: int = 8000):
@@ -716,14 +793,13 @@ class Mario(AgentBase):
             verbose = os.getenv("OCEAN_VERBOSE", "1") not in ("0", "false", "False")
             if verbose:
                 from .feed import agent_say as _say
-                _say("Mario", '"Context prepared."')
+                _say("Mario", f'"{_context_msg(bundle)}"')
             instruction = (
                 "Generate a GitHub Actions CI workflow for Python 3.11 running pytest and basic lint. "
                 "Save as .github/workflows/ci.yml."
             )
             files = codex_exec.generate_files(instruction, [".github/workflows/ci.yml"], bundle, agent=self.name)
             if files:
-                from .codex_exec import last_mode
                 for rel, content in files.items():
                     Path(rel).parent.mkdir(parents=True, exist_ok=True)
                     Path(rel).write_text(content, encoding="utf-8")
@@ -786,14 +862,13 @@ jobs:
             verbose = os.getenv("OCEAN_VERBOSE", "1") not in ("0", "false", "False")
             if verbose:
                 from .feed import agent_say as _say
-                _say("Mario", '"Context prepared."')
+                _say("Mario", f'"{_context_msg(bundle)}"')
             instruction = (
                 f"Generate Dockerfile and .dockerignore for a FastAPI app named '{spec.name}'. "
                 "Expose 8000 and run uvicorn backend.app:app."
             )
             files = codex_exec.generate_files(instruction, ["Dockerfile", ".dockerignore"], bundle, agent=self.name)
             if files:
-                from .codex_exec import last_mode
                 for rel, content in files.items():
                     Path(rel).parent.mkdir(parents=True, exist_ok=True)
                     Path(rel).write_text(content, encoding="utf-8")
@@ -819,7 +894,12 @@ jobs:
 
         # No local fallback
         from .feed import agent_say as _say
-        _say("Mario", '"❌ Codegen unavailable (no subscription or API). Skipping Docker config until Codex/API is ready."')
+        try:
+            from .codex_exec import last_error as _last_err  # type: ignore
+            detail = _last_err() or "unavailable"
+        except Exception:
+            detail = "unavailable"
+        _say("Mario", f'"❌ Codegen failed — {detail}."')
 
     def _generate_deployment_config(self, spec: ProjectSpec):
         """Generate deployment config using Codex MCP (MCP-only)."""
@@ -831,13 +911,12 @@ jobs:
             verbose = os.getenv("OCEAN_VERBOSE", "1") not in ("0", "false", "False")
             if verbose:
                 from .feed import agent_say as _say
-                _say("Mario", '"Context prepared."')
+                _say("Mario", f'"{_context_msg(bundle)}"')
             instruction = (
                 f"Generate devops/deploy.yaml for a {spec.name} FastAPI app with /healthz health endpoint."
             )
             files = codex_exec.generate_files(instruction, ["devops/deploy.yaml"], bundle, agent=self.name)
             if files:
-                from .codex_exec import last_mode
                 for rel, content in files.items():
                     Path(rel).parent.mkdir(parents=True, exist_ok=True)
                     Path(rel).write_text(content, encoding="utf-8")
@@ -863,7 +942,12 @@ jobs:
 
         # No local fallback
         from .feed import agent_say as _say
-        _say("Mario", '"❌ Codegen unavailable (no subscription or API). Skipping deployment config until Codex/API is ready."')
+        try:
+            from .codex_exec import last_error as _last_err  # type: ignore
+            detail = _last_err() or "unavailable"
+        except Exception:
+            detail = "unavailable"
+        _say("Mario", f'"❌ Codegen failed — {detail}."')
 
     def _find_free_port(self, start: int = 8000, limit: int = 20) -> int:
         port = start
@@ -1032,9 +1116,11 @@ class Tony(AgentBase):
 
         If pytest is not available or no tests exist, generate a simple exploratory note.
         """
-        docs = Path("docs"); docs.mkdir(exist_ok=True)
+        docs = Path("docs")
+        docs.mkdir(exist_ok=True)
         report = docs / "test_report.md"
-        import subprocess, sys
+        import subprocess
+        import sys
         lines: list[str] = ["# Test Report", "", f"Generated: {datetime.now().isoformat()}", ""]
         try:
             code = subprocess.call([sys.executable, "-m", "pytest", "-q"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
