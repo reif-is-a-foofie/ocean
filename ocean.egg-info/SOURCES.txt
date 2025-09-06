@@ -32,4 +32,5 @@ ocean_brython-snake/snake.py
 ocean_brython-snake/backend/app.py
 ocean_brython-snake/projects/a-browser-snake-game-built-with-vanilla-js-python/backend/app.py
 tests/test_cli_chat.py
+tests/test_codex_e2e.py
 tests/test_planner.py

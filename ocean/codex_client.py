@@ -22,6 +22,9 @@ def _codex_bin() -> Optional[str]:
 
 def _logged_in() -> bool:
     try:
+        # Explicit env flags
+        if os.getenv("OCEAN_CODEX_AUTH") in ("1", "true", "True"):
+            return True
         # Env token takes precedence
         if os.getenv("CODEX_AUTH_TOKEN"):
             return True

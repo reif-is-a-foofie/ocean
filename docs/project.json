@@ -1,19 +1,15 @@
 {
-  "name": "Ocean Project PRD — Web Tic-Tac-Toe",
+  "name": "🌊 OCEAN - Multi-Agent Software Engineering Orchestrator",
   "kind": "web",
   "description": "## Summary",
   "goals": [
-    "Single‑player Tic‑Tac‑Toe vs computer",
-    "Simple",
-    "responsive UI (HTML/CSS/JS)",
-    "Minimal backend with health check and scores API",
-    "Persist high scores locally (file or SQLite)",
-    "Clear instructions and quick start script"
+    "testing enabled",
+    "containerized",
+    "fastapi backend",
+    "static UI"
   ],
   "constraints": [
-    "Minimal dependencies",
-    "Work offline",
-    "no cloud services required"
+    "minimal dependencies"
   ],
-  "createdAt": "2025-09-05T13:04:32.896244"
+  "createdAt": "2025-09-05T20:05:52.983892"
 }

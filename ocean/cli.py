@@ -311,6 +311,15 @@ def _hydrate_tokens() -> None:
         _load_env_file(Path.home() / ".config" / "ocean" / ".env")
     except Exception:
         pass
+    # Announce API key presence once (masked) for easy diagnostics
+    try:
+        key = os.getenv("OPENAI_API_KEY")
+        if key and os.getenv("OCEAN_APIKEY_ANNOUNCED") != "1":
+            masked = (key[:6] + "…") if len(key) > 6 else "(set)"
+            feed(f"🌊 Ocean: OPENAI_API_KEY detected (len={len(key)}, prefix={masked})")
+            os.environ["OCEAN_APIKEY_ANNOUNCED"] = "1"
+    except Exception:
+        pass
     try:
         # CODEX token from auth.json
         if not os.getenv("CODEX_AUTH_TOKEN"):
@@ -323,6 +332,62 @@ def _hydrate_tokens() -> None:
                     os.environ["CODEX_AUTH_TOKEN"] = tok
                     os.environ["OCEAN_CODEX_AUTH"] = "1"
     except Exception:
+        pass
+
+def _warmup_codex(model: str | None = None, timeout: int = 25) -> None:
+    """Warm Codex up without executing a model.
+
+    - Runs `codex --version` to verify CLI presence
+    - Probes `codex auth` to verify subscription auth
+    - Attempts a login once if needed (idempotent)
+    - Sets OCEAN_CODEX_AUTH=1 on success
+    - Emits one concise feed line only on failure
+    """
+    try:
+        import shutil, subprocess
+        codex = shutil.which("codex")
+        if not codex:
+            feed("🌊 Ocean: ❌ Codex CLI not found on PATH (warmup). Install 'codex'.")
+            return
+        # Version check (presence only)
+        v = subprocess.run([codex, "--version"], capture_output=True, text=True, timeout=timeout)
+        if v.returncode != 0:
+            head = (v.stderr or v.stdout or "").strip().splitlines()[:1]
+            feed("🌊 Ocean: ❌ codex --version failed — " + (head[0] if head else "no output"))
+            return
+        # Auth probe
+        a = subprocess.run([codex, "auth"], capture_output=True, text=True, timeout=timeout)
+        txt = (a.stdout or a.stderr or "").lower()
+        if any(k in txt for k in ("logged in", "authenticated", "already logged")) or os.getenv("CODEX_AUTH_TOKEN"):
+            os.environ["OCEAN_CODEX_AUTH"] = "1"
+            # Announce subscription once per session
+            if os.getenv("OCEAN_CODEX_ANNOUNCED") != "1":
+                ver = (v.stdout or v.stderr or "").strip().splitlines()[:1]
+                try:
+                    feed("🌊 Ocean: Codex subscription active" + (f" ({ver[0]})" if ver else ""))
+                except Exception:
+                    pass
+                os.environ["OCEAN_CODEX_ANNOUNCED"] = "1"
+            return
+        # Attempt a login (idempotent), then re-probe
+        _ensure_codex_auth()
+        a2 = subprocess.run([codex, "auth"], capture_output=True, text=True, timeout=timeout)
+        txt2 = (a2.stdout or a2.stderr or "").lower()
+        if any(k in txt2 for k in ("logged in", "authenticated", "already logged")) or os.getenv("CODEX_AUTH_TOKEN"):
+            os.environ["OCEAN_CODEX_AUTH"] = "1"
+            if os.getenv("OCEAN_CODEX_ANNOUNCED") != "1":
+                ver = (v.stdout or v.stderr or "").strip().splitlines()[:1]
+                try:
+                    feed("🌊 Ocean: Codex subscription active" + (f" ({ver[0]})" if ver else ""))
+                except Exception:
+                    pass
+                os.environ["OCEAN_CODEX_ANNOUNCED"] = "1"
+            return
+        # Failure: keep it concise
+        head = (a2.stdout or a2.stderr or a.stdout or a.stderr or "").strip().splitlines()[:2]
+        feed("🌊 Ocean: ❌ Codex auth not ready — " + (" | ".join(s.strip() for s in head) or "no output"))
+    except Exception:
+        # Stay silent; normal flow will emit detailed reasons
         pass
 
 
@@ -702,6 +767,24 @@ def chat(
     # Load environment from local .env if present (e.g., BRAVE_API_KEY)
     _hydrate_tokens()
     _load_env_file(ROOT / ".env")
+    # Announce again in case key came from workspace .env
+    try:
+        key = os.getenv("OPENAI_API_KEY")
+        if key and os.getenv("OCEAN_APIKEY_ANNOUNCED") != "1":
+            masked = (key[:6] + "…") if len(key) > 6 else "(set)"
+            feed(f"🌊 Ocean: OPENAI_API_KEY detected (len={len(key)}, prefix={masked})")
+            os.environ["OCEAN_APIKEY_ANNOUNCED"] = "1"
+    except Exception:
+        pass
+    # Announce again in case key came from workspace .env
+    try:
+        key = os.getenv("OPENAI_API_KEY")
+        if key and os.getenv("OCEAN_APIKEY_ANNOUNCED") != "1":
+            masked = (key[:6] + "…") if len(key) > 6 else "(set)"
+            feed(f"🌊 Ocean: OPENAI_API_KEY detected (len={len(key)}, prefix={masked})")
+            os.environ["OCEAN_APIKEY_ANNOUNCED"] = "1"
+    except Exception:
+        pass
     
     # Create session log
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -727,6 +810,16 @@ def chat(
     MCP.ensure_started(log)
     # Ensure project-level venv for convenience
     _ensure_root_venv()
+    # Warm up Codex session early so codegen runs without delays
+    _warmup_codex()
+    # Hard e2e check: bail out early if exec can't run, to avoid long loops
+    try:
+        ok, detail = _codex_e2e_test(timeout=8)
+    except Exception:
+        ok, detail = False, "unknown error"
+    if not ok:
+        feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Run 'codex auth login' or set OPENAI_API_KEY. Aborting early.")
+        raise typer.Exit(code=2)
     # In feed mode we require Codex for codegen phases; errors are surfaced during plan/execute
     status = MCP.status()
 
@@ -1595,6 +1688,31 @@ def loop(
     """
     ensure_repo_structure()
     _load_env_file(ROOT / ".env")
+    # Hydrate API keys and ensure Codex auth so codegen works in loop mode
+    _hydrate_tokens()
+    _ensure_codex_auth()
+    _warmup_codex()
+    # Verify Codex exec works before entering long iteration
+    try:
+        ok, detail = _codex_e2e_test(timeout=8)
+    except Exception:
+        ok, detail = False, "unknown error"
+    if not ok:
+        feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Waiting for auth/key… (retrying)")
+        # Retry loop: wait in short intervals until available
+        import time as _t
+        for _ in range(6):  # ~48s total
+            _t.sleep(4)
+            try:
+                ok, detail = _codex_e2e_test(timeout=6)
+            except Exception:
+                ok = False
+            if ok:
+                feed("🌊 Ocean: Codex exec OK. Proceeding with iteration.")
+                break
+        if not ok:
+            feed("🌊 Ocean: ❌ Codex still not ready. Exiting loop to save time.")
+            raise typer.Exit(code=2)
     # Set up a single events file for the session
     if not os.getenv("OCEAN_EVENTS_FILE"):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -1607,6 +1725,7 @@ def loop(
         while True:
             cycle += 1
             # Load or synthesize spec per cycle
+            _codex_debug_probe(verbose=os.getenv("OCEAN_VERBOSE", "0") not in ("0", "false", "False"))
             spec_dict = _load_project_spec()
             if not spec_dict:
                 prd = _load_prd()
@@ -1694,6 +1813,45 @@ def _wait_for_continue_or_change(paths: list[Path]) -> None:
             _emit_event("note", agent="Ocean", title="Requirements/spec changed; resuming iteration…")
             return
         _t.sleep(1)
+
+def _codex_debug_probe(verbose: bool = False) -> None:
+    """Emit a concise Codex status line to the feed, with details on failure.
+
+    Shows: mode (subscription/api_fallback/none), codex path, version snippet,
+    token presence, OPENAI_API_KEY presence, and a short auth hint.
+    """
+    try:
+        from . import codex_client as _cc
+        st = _cc.check()
+    except Exception as e:
+        feed(f"🌊 Ocean: ❌ Codex probe failed: {e}")
+        return
+    import shutil, subprocess
+    codex_path = shutil.which("codex") or "(not found)"
+    version = "(n/a)"
+    if shutil.which("codex"):
+        try:
+            out = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
+            version = (out.stdout or out.stderr or "").strip().splitlines()[0][:80]
+        except Exception:
+            version = "(error)"
+    token = "yes" if os.getenv("CODEX_AUTH_TOKEN") else "no"
+    api = "yes" if os.getenv("OPENAI_API_KEY") else "no"
+    mode = st.mode if getattr(st, "ok", False) else "none"
+    # Always show one-liner mode; details when failing or verbose
+    feed(f"🌊 Ocean: Codex mode={mode}, codex={codex_path}, version={version}, token={token}, api_key={api}")
+    if not getattr(st, "ok", False):
+        # Try to add auth hint
+        try:
+            out = subprocess.run(["codex", "auth"], capture_output=True, text=True, timeout=5)
+            line = (out.stdout or out.stderr or "").strip().splitlines()[:2]
+            if line:
+                feed("🌊 Ocean: codex auth → " + " | ".join(s.strip() for s in line))
+        except Exception:
+            pass
+        feed("🌊 Ocean: Hint: run 'codex auth login' or set OPENAI_API_KEY.")
+    elif verbose:
+        feed("🌊 Ocean: Codex ready. Using subscription or API fallback.")
 
 
 @app.command(help="Run Repo-Scout: per-agent codex exec reports and Moroni synthesis")
@@ -1863,7 +2021,55 @@ def _run_doctor_quick(full: bool = False) -> None:
             auth = "run 'codex auth login'"
     table.add_row("codex auth", auth)
 
+    # Optional end-to-end exec test (fast, token-free if subscription)
+    try:
+        ok, detail = _codex_e2e_test()
+        table.add_row("codex exec (e2e)", detail if ok else f"error: {detail}")
+    except Exception as e:
+        table.add_row("codex exec (e2e)", f"error: {e}")
+
     console.print(table)
+
+
+def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str]:
+    """Tiny end-to-end check of `codex exec` without heavy cost.
+
+    Sends a trivial instruction asking for `{}` JSON; returns (ok, detail).
+    """
+    import shutil, subprocess, json as _json, os as _os
+    codex = shutil.which("codex")
+    if not codex:
+        return False, "codex not found"
+    model = _os.getenv("OCEAN_CODEX_MODEL", "o4-mini")
+    prompt = "Return ONLY JSON object {}."
+    try:
+        proc = subprocess.run([codex, "exec", "--model", model], input=prompt.encode("utf-8"), capture_output=True, timeout=timeout)
+        out = (proc.stdout or b"").decode("utf-8", errors="ignore")
+        err = (proc.stderr or b"").decode("utf-8", errors="ignore")
+        try:
+            obj = _json.loads(out)
+        except Exception:
+            obj = None
+        if isinstance(obj, dict):
+            return True, f"ok (model: {model})"
+        head = (err or out or "").strip().splitlines()[:1]
+        return False, (head[0] if head else "no output")
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+    except Exception as e:
+        return False, str(e)
+
+
+@app.command(help="Quick Codex E2E test (no heavy usage)")
+def codex_test():
+    """Run a tiny codex exec to validate end-to-end readiness and print a one-line result."""
+    ok, detail = _codex_e2e_test()
+    if ok:
+        feed(f"🌊 Ocean: Codex E2E: {detail}")
+        raise typer.Exit(code=0)
+    else:
+        feed(f"🌊 Ocean: ❌ Codex E2E failed: {detail}")
+        raise typer.Exit(code=1)
 
 
 @app.command(help="Create a release commit and tag (Mario)")

@@ -1,23 +1,19 @@
 ## project.json
 
 {
-  "name": "Ocean Project PRD — Web Tic-Tac-Toe",
+  "name": "🌊 OCEAN - Multi-Agent Software Engineering Orchestrator",
   "kind": "web",
   "description": "## Summary",
   "goals": [
-    "Single‑player Tic‑Tac‑Toe vs computer",
-    "Simple",
-    "responsive UI (HTML/CSS/JS)",
-    "Minimal backend with health check and scores API",
-    "Persist high scores locally (file or SQLite)",
-    "Clear instructions and quick start script"
+    "testing enabled",
+    "containerized",
+    "fastapi backend",
+    "static UI"
   ],
   "constraints": [
-    "Minimal dependencies",
-    "Work offline",
-    "no cloud services required"
+    "minimal dependencies"
   ],
-  "createdAt": "2025-09-05T12:02:48.368256"
+  "createdAt": "2025-09-05T19:56:28.239293"
 }
 
 
@@ -88,7 +84,7 @@
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8005/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8006/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   }
@@ -115,58 +111,31 @@
 
 ## prd.md (truncated)
 
-# Ocean Project PRD — Web Tic-Tac-Toe
+# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
 
 ## Summary
-Build a small web-based Tic-Tac-Toe game with a 1‑player mode (play against the computer AI). If you win, enter your name to record a high score. Keep it simple and fast to run locally.
+# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
 
 ## Goals
-- Single‑player Tic‑Tac‑Toe vs computer
-- Simple, responsive UI (HTML/CSS/JS)
-- Minimal backend with health check and scores API
-- Persist high scores locally (file or SQLite)
-- Clear instructions and quick start script
-
-## Non‑Goals
-- Multiplayer networking
-- Authentication/user accounts
-- Sophisticated graphics or frameworks
-
-## Requirements
-- 3x3 board, player is X, computer is O
-- Basic computer AI (at least block winning moves; preferably minimax for unbeatable AI)
-- When the player wins, prompt for a name and save the score with timestamp
-- Show top 10 scores on the page
-- Backend endpoints:
-  - GET `/healthz` → `{ ok: true }`
-  - GET `/scores` → list of scores (JSON)
-  - POST `/scores` → body `{ name: string, result: 'win'|'loss'|'draw', ts?: string }`
-- Serve static UI from `ui/`
-
-## Tech
-- Backend: FastAPI, Uvicorn
-- Storage: SQLite or local JSON (choose simplest)
-- Frontend: Plain HTML/CSS/JS (no heavy frameworks)
-- Dev: Python 3.11+, `run.sh` helper, Dockerfile + CI
-
-## UX Notes
-- Board shows turn status and game result (Win/Loss/Draw)
-- “New Game” button resets the board
-- “High Scores” panel lists top results
-
-## Stretch (optional)
-- Difficulty toggle (easy/unbeatable)
-- Animations for win line
+- testing enabled
+- containerized
+- fastapi backend
+- static UI
 
 ## Constraints
-- Minimal dependencies
-- Work offline, no cloud services required
+- minimal dependencies
+
+## Detected
+- Kind: web
+- Tech: Python/pyproject, requirements.txt, Dockerfile, GitHub Actions
 
 
 
 ## repository tree (depth=3)
 
 # .
+
+.DS_Store
 
 .cursorrules
 
@@ -297,6 +266,10 @@ logs/events-20250905-120433.jsonl
 logs/events-20250905-122414.jsonl
 
 logs/events-20250905-124816.jsonl
+
+logs/events-20250905-130424.jsonl
+
+logs/events-20250905-195554.jsonl
 
 logs/mcp-edna-20250902-191119-rpc.log
 
@@ -456,6 +429,8 @@ logs/runtime-backend-20250903-213947.log
 
 logs/runtime-backend-20250905-102841.log
 
+logs/runtime-backend-20250905-130434.log
+
 logs/runtime-ui-20250902-191220.log
 
 logs/runtime-ui-20250902-212832.log
@@ -471,6 +446,8 @@ logs/runtime-ui-20250903-213759.log
 logs/runtime-ui-20250903-213947.log
 
 logs/runtime-ui-20250905-102841.log
+
+logs/runtime-ui-20250905-130434.log
 
 logs/session-20250902-140754.log
 
@@ -614,6 +591,10 @@ logs/session-20250905-115328.log
 
 logs/session-20250905-120233.log
 
+logs/session-20250905-130424.log
+
+logs/session-20250905-195554.log
+
 main.py
 
 ocean/__init__.py
@@ -626,6 +607,8 @@ ocean/__pycache__/brave_search.cpython-313.pyc
 
 ocean/__pycache__/cli.cpython-313.pyc
 
+ocean/__pycache__/codex_client.cpython-313.pyc
+
 ocean/__pycache__/codex_exec.cpython-313.pyc
 
 ocean/__pycache__/codex_wrap.cpython-313.pyc
@@ -633,6 +616,8 @@ ocean/__pycache__/codex_wrap.cpython-313.pyc
 ocean/__pycache__/context.cpython-313.pyc
 
 ocean/__pycache__/crewai_adapter.cpython-313.pyc
+
+ocean/__pycache__/feed.cpython-313.pyc
 
 ocean/__pycache__/mcp.cpython-313.pyc
 
@@ -652,6 +637,8 @@ ocean/brave_search.py
 
 ocean/cli.py
 
+ocean/codex_client.py
+
 ocean/codex_exec.py
 
 ocean/codex_wrap.py
@@ -659,6 +646,8 @@ ocean/codex_wrap.py
 ocean/context.py
 
 ocean/crewai_adapter.py
+
+ocean/feed.py
 
 ocean/mcp.py
 
@@ -669,6 +658,8 @@ ocean/models.py
 ocean/persona.py
 
 ocean/planner.py
+
+ocean/requirements.py
 
 ocean/tools/__init__.py
 
@@ -698,53 +689,305 @@ ocean.egg-info/requires.txt
 
 ocean.egg-info/top_level.txt
 
+ocean_brython-snake/.DS_Store
+
+ocean_brython-snake/.dockerignore
+
+ocean_brython-snake/.ocean_workspace
+
+ocean_brython-snake/Dockerfile
+
+ocean_brython-snake/LICENSE
+
+ocean_brython-snake/README.md
+
+ocean_brython-snake/backend/app.py
+
+ocean_brython-snake/brython.html
+
+ocean_brython-snake/devops/deploy.yaml
+
+ocean_brython-snake/docs/api_design.md
+
+ocean_brython-snake/docs/architecture.md
+
+ocean_brython-snake/docs/backlog.json
+
+ocean_brython-snake/docs/context_bundle.md
+
+ocean_brython-snake/docs/context_summary.md
+
+ocean_brython-snake/docs/plan.md
+
+ocean_brython-snake/docs/prd.md
+
+ocean_brython-snake/docs/project.json
+
+ocean_brython-snake/docs/test_report.md
+
+ocean_brython-snake/javascript.html
+
+ocean_brython-snake/logs/codex-edna-20250905-173926.log
+
+ocean_brython-snake/logs/codex-edna-20250905-174258.log
+
+ocean_brython-snake/logs/codex-edna-20250905-174747.log
+
+ocean_brython-snake/logs/codex-edna-20250905-180608.log
+
+ocean_brython-snake/logs/codex-edna-20250905-181039.log
+
+ocean_brython-snake/logs/codex-edna-20250905-182436.log
+
+ocean_brython-snake/logs/codex-edna-20250905-191929.log
+
+ocean_brython-snake/logs/codex-edna-20250905-193235.log
+
+ocean_brython-snake/logs/codex-edna-20250905-194405.log
+
+ocean_brython-snake/logs/codex-mario-20250905-173930.log
+
+ocean_brython-snake/logs/codex-mario-20250905-173934.log
+
+ocean_brython-snake/logs/codex-mario-20250905-173938.log
+
+ocean_brython-snake/logs/codex-mario-20250905-174303.log
+
+ocean_brython-snake/logs/codex-mario-20250905-174308.log
+
+ocean_brython-snake/logs/codex-mario-20250905-174312.log
+
+ocean_brython-snake/logs/codex-mario-20250905-174810.log
+
+ocean_brython-snake/logs/codex-mario-20250905-174832.log
+
+ocean_brython-snake/logs/codex-mario-20250905-174855.log
+
+ocean_brython-snake/logs/codex-mario-20250905-180631.log
+
+ocean_brython-snake/logs/codex-mario-20250905-180654.log
+
+ocean_brython-snake/logs/codex-mario-20250905-180717.log
+
+ocean_brython-snake/logs/codex-mario-20250905-181102.log
+
+ocean_brython-snake/logs/codex-mario-20250905-181124.log
+
+ocean_brython-snake/logs/codex-mario-20250905-182448.log
+
+ocean_brython-snake/logs/codex-mario-20250905-182501.log
+
+ocean_brython-snake/logs/codex-mario-20250905-182513.log
+
+ocean_brython-snake/logs/codex-mario-20250905-191941.log
+
+ocean_brython-snake/logs/codex-mario-20250905-191953.log
+
+ocean_brython-snake/logs/codex-mario-20250905-192005.log
+
+ocean_brython-snake/logs/codex-mario-20250905-193248.log
+
+ocean_brython-snake/logs/codex-mario-20250905-193301.log
+
+ocean_brython-snake/logs/codex-mario-20250905-193314.log
+
+ocean_brython-snake/logs/codex-mario-20250905-194417.log
+
+ocean_brython-snake/logs/codex-mario-20250905-194430.log
+
+ocean_brython-snake/logs/codex-mario-20250905-194442.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-141053.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-145111.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-145133.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-165415.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-170123.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-171105.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-171802.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-172815.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-173913.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-174245.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-174658.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-180518.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-180950.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-182408.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-191736.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-191901.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-193206.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-194045.log
+
+ocean_brython-snake/logs/codex-moroni-20250905-194336.log
+
+ocean_brython-snake/logs/codex-q-20250905-173921.log
+
+ocean_brython-snake/logs/codex-q-20250905-174254.log
+
+ocean_brython-snake/logs/codex-q-20250905-174724.log
+
+ocean_brython-snake/logs/codex-q-20250905-180545.log
+
+ocean_brython-snake/logs/codex-q-20250905-181016.log
+
+ocean_brython-snake/logs/codex-q-20250905-182424.log
+
+ocean_brython-snake/logs/codex-q-20250905-191917.log
+
+ocean_brython-snake/logs/codex-q-20250905-193223.log
+
+ocean_brython-snake/logs/codex-q-20250905-194102.log
+
+ocean_brython-snake/logs/codex-q-20250905-194352.log
+
+ocean_brython-snake/logs/events-20250905-141040.jsonl
+
+ocean_brython-snake/logs/events-20250905-145058.jsonl
+
+ocean_brython-snake/logs/events-20250905-145120.jsonl
+
+ocean_brython-snake/logs/events-20250905-165350.jsonl
+
+ocean_brython-snake/logs/events-20250905-170052.jsonl
+
+ocean_brython-snake/logs/events-20250905-171038.jsonl
+
+ocean_brython-snake/logs/events-20250905-171732.jsonl
+
+ocean_brython-snake/logs/events-20250905-172758.jsonl
+
+ocean_brython-snake/logs/events-20250905-173901.jsonl
+
+ocean_brython-snake/logs/events-20250905-174233.jsonl
+
+ocean_brython-snake/logs/events-20250905-174645.jsonl
+
+ocean_brython-snake/logs/events-20250905-180502.jsonl
+
+ocean_brython-snake/logs/events-20250905-180934.jsonl
+
+ocean_brython-snake/logs/events-20250905-182353.jsonl
+
+ocean_brython-snake/logs/events-20250905-191720.jsonl
+
+ocean_brython-snake/logs/events-20250905-191846.jsonl
+
+ocean_brython-snake/logs/events-20250905-193148.jsonl
+
+ocean_brython-snake/logs/events-20250905-194030.jsonl
+
+ocean_brython-snake/logs/events-20250905-194320.jsonl
+
+ocean_brython-snake/logs/mcp-edna.log
+
+ocean_brython-snake/logs/mcp-mario.log
+
+ocean_brython-snake/logs/mcp-moroni.log
+
+ocean_brython-snake/logs/mcp-q.log
+
+ocean_brython-snake/logs/mcp-tony.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-173938.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-174312.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-174913.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-180735.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-182523.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-192013.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-193321.log
+
+ocean_brython-snake/logs/runtime-backend-20250905-194449.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-173938.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-174312.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-174913.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-180735.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-182523.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-192013.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-193321.log
+
+ocean_brython-snake/logs/runtime-ui-20250905-194449.log
+
+ocean_brython-snake/logs/session-20250905-141040.log
+
+ocean_brython-snake/logs/session-20250905-145058.log
+
+ocean_brython-snake/logs/session-20250905-145120.log
+
+ocean_brython-snake/logs/session-20250905-165350.log
+
+ocean_brython-snake/logs/session-20250905-170052.log
+
+ocean_brython-snake/logs/session-20250905-171038.log
+
+ocean_brython-snake/logs/session-20250905-171732.log
+
+ocean_brython-snake/logs/session-20250905-172758.log
+
+ocean_brython-snake/logs/session-20250905-173901.log
+
+ocean_brython-snake/logs/session-20250905-174233.log
+
+ocean_brython-snake/logs/session-20250905-174645.log
+
+ocean_brython-snake/logs/session-20250905-180502.log
+
+ocean_brython-snake/logs/session-20250905-180934.log
+
+ocean_brython-snake/logs/session-20250905-182353.log
+
+ocean_brython-snake/logs/session-20250905-191720.log
+
+ocean_brython-snake/logs/session-20250905-191846.log
+
+ocean_brython-snake/logs/session-20250905-193148.log
+
+ocean_brython-snake/logs/session-20250905-194030.log
+
+ocean_brython-snake/logs/session-20250905-194320.log
+
+ocean_brython-snake/snake.js
+
+ocean_brython-snake/snake.py
+
+ocean_brython-snake/ui/index.html
+
+ocean_brython-snake/ui/styles.css
+
+ocean_brython-snake/venv/.gitignore
+
+ocean_brython-snake/venv/pyvenv.cfg
+
 ocean_entrypoint.py
 
-projects/dolphin-dash/.dockerignore
-
-projects/dolphin-dash/.env
-
-projects/dolphin-dash/Dockerfile
-
-projects/dolphin-dash/README.md
-
-projects/dolphin-dash/docker-compose.yml
-
-projects/dolphin-dash/run.sh
-
-projects/dolphin-dash/state.json
-
-projects/ocean-demo/.dockerignore
-
-projects/ocean-demo/.env
-
-projects/ocean-demo/Dockerfile
-
-projects/ocean-demo/README.md
-
-projects/ocean-demo/docker-compose.yml
-
-projects/ocean-demo/run.sh
-
-projects/ocean-demo/state.json
-
-projects/ocean-project-prd--web-tic-tac-toe/.dockerignore
-
-projects/ocean-project-prd--web-tic-tac-toe/.env
-
-projects/ocean-project-prd--web-tic-tac-toe/Dockerfile
-
-projects/ocean-project-prd--web-tic-tac-toe/README.md
-
-projects/ocean-project-prd--web-tic-tac-toe/docker-compose.yml
-
-projects/ocean-project-prd--web-tic-tac-toe/run.sh
-
-projects/ocean-project-prd--web-tic-tac-toe/state.json
-
-projects/snake-pygame/README.md
-
-projects/snake-pygame/Snake Game.py
+ocean_reif/.claude.json.backup
 
 pyproject.toml
 
@@ -758,9 +1001,13 @@ test_output.log
 
 tests/__pycache__/test_cli_chat.cpython-313-pytest-8.4.1.pyc
 
+tests/__pycache__/test_codex_e2e.cpython-313-pytest-8.4.1.pyc
+
 tests/__pycache__/test_planner.cpython-313-pytest-8.4.1.pyc
 
 tests/test_cli_chat.py
+
+tests/test_codex_e2e.py
 
 tests/test_planner.py
 
@@ -1126,7 +1373,7 @@ Generated by OCEAN (local fallback)
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8005/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8006/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   }
@@ -1337,9 +1584,8 @@ Build a small web-based Tic-Tac-Toe game with a 1‑player mode (play against th
     "Work offline",
     "no cloud services required"
   ],
-  "createdAt": "2025-09-05T12:02:48.368256"
+  "createdAt": "2025-09-05T13:04:32.896244"
 }
-
 
 
 ## backlog.json
@@ -1415,7 +1661,6 @@ Build a small web-based Tic-Tac-Toe game with a 1‑player mode (play against th
 ]
 
 
-
 ## plan.md
 
 # Initial Plan
@@ -1430,7 +1675,6 @@ Build a small web-based Tic-Tac-Toe game with a 1‑player mode (play against th
 - [Mario] Create Dockerfile — Dockerfile, .dockerignore
 - [Mario] Create deployment config — devops/deploy.yaml
 - [Mario] Start local runtime — (tbd)
-
 
 
 ## prd.md (truncated)
@@ -1466,7 +1710,7 @@ Build a small web-based Tic-Tac-Toe game with a 1‑player mode (play against th
 ## Tech
 - Backend: FastAPI, Uvicorn
 - Storage: SQLite or local JSON (choose simplest)
-- 
+- Fro
 
 ### docs/deploy.md
 
@@ -1667,74 +1911,41 @@ agents:
 
 ### docs/prd.md
 
-# Ocean Project PRD — Web Tic-Tac-Toe
+# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
 
 ## Summary
-Build a small web-based Tic-Tac-Toe game with a 1‑player mode (play against the computer AI). If you win, enter your name to record a high score. Keep it simple and fast to run locally.
+# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
 
 ## Goals
-- Single‑player Tic‑Tac‑Toe vs computer
-- Simple, responsive UI (HTML/CSS/JS)
-- Minimal backend with health check and scores API
-- Persist high scores locally (file or SQLite)
-- Clear instructions and quick start script
-
-## Non‑Goals
-- Multiplayer networking
-- Authentication/user accounts
-- Sophisticated graphics or frameworks
-
-## Requirements
-- 3x3 board, player is X, computer is O
-- Basic computer AI (at least block winning moves; preferably minimax for unbeatable AI)
-- When the player wins, prompt for a name and save the score with timestamp
-- Show top 10 scores on the page
-- Backend endpoints:
-  - GET `/healthz` → `{ ok: true }`
-  - GET `/scores` → list of scores (JSON)
-  - POST `/scores` → body `{ name: string, result: 'win'|'loss'|'draw', ts?: string }`
-- Serve static UI from `ui/`
-
-## Tech
-- Backend: FastAPI, Uvicorn
-- Storage: SQLite or local JSON (choose simplest)
-- Frontend: Plain HTML/CSS/JS (no heavy frameworks)
-- Dev: Python 3.11+, `run.sh` helper, Dockerfile + CI
-
-## UX Notes
-- Board shows turn status and game result (Win/Loss/Draw)
-- “New Game” button resets the board
-- “High Scores” panel lists top results
-
-## Stretch (optional)
-- Difficulty toggle (easy/unbeatable)
-- Animations for win line
+- testing enabled
+- containerized
+- fastapi backend
+- static UI
 
 ## Constraints
-- Minimal dependencies
-- Work offline, no cloud services required
+- minimal dependencies
+
+## Detected
+- Kind: web
+- Tech: Python/pyproject, requirements.txt, Dockerfile, GitHub Actions
 
 
 ### docs/project.json
 
 {
-  "name": "Ocean Project PRD — Web Tic-Tac-Toe",
+  "name": "🌊 OCEAN - Multi-Agent Software Engineering Orchestrator",
   "kind": "web",
   "description": "## Summary",
   "goals": [
-    "Single‑player Tic‑Tac‑Toe vs computer",
-    "Simple",
-    "responsive UI (HTML/CSS/JS)",
-    "Minimal backend with health check and scores API",
-    "Persist high scores locally (file or SQLite)",
-    "Clear instructions and quick start script"
+    "testing enabled",
+    "containerized",
+    "fastapi backend",
+    "static UI"
   ],
   "constraints": [
-    "Minimal dependencies",
-    "Work offline",
-    "no cloud services required"
+    "minimal dependencies"
   ],
-  "createdAt": "2025-09-05T12:02:48.368256"
+  "createdAt": "2025-09-05T19:56:28.239293"
 }
 
 
@@ -1824,4 +2035,11 @@ agents:
 - [FastAPI Best Practices: A Condensed Guide with Examples](https://developer-service.blog/fastapi-best-practices-a-condensed-guide-with-examples/) — <strong>FastAPI</strong> is a modern, high-performance web framework for building APIs with Python, based on standard Python type hints.
 - [r/Python on Reddit: FastAPI Best Practices](https://www.reddit.com/r/Python/comments/wrt7om/fastapi_best_practices/) — 443 votes, 79 comments. Although <strong>FastAPI</strong> is a great framework with fantastic documentation, it&#x27;s not quite obvious how to build larger projects for…
 - [python - What are the best practices for structuring a FastAPI project? - Stack Overflow](https://stackoverflow.com/questions/64943693/what-are-the-best-practices-for-structuring-a-fastapi-project) — The problem that I want to solve related the project setup: Good names of directories so that their purpose is clear. Keeping all project files (including virtualenv) in one place, so I can easily...
+
+## HTML CSS landing page accessibility checklist
+- [WebAIM: WebAIM's WCAG 2 Checklist](https://webaim.org/standards/wcag/checklist) — Images that do not convey content, ... as <strong>CSS</strong> backgrounds. All linked images have descriptive alternative text. Equivalent alternatives to complex images are provided in context or on a separate linked <strong>page</strong>. Form buttons have a descriptive value. Inputs have associated <strong>accessible</strong> ...
+- [HTML: A good basis for accessibility - Learn web development | MDN](https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Accessibility/HTML) — A great deal of web content can be made <strong>accessible</strong> just by making sure the correct Hypertext Markup Language elements are used for the correct purpose at all times. This article looks in detail at how <strong>HTML</strong> can be used to ensure maximum <strong>accessibility</strong>.
+- [Easy Checks – A First Review of Web Accessibility | Web Accessibility Initiative (WAI) | W3C](https://www.w3.org/WAI/test-evaluate/preliminary/) — Open the web page you are checking. <strong>In the toolbar, select &quot;Images&quot;, then &quot;Remove Images&quot;.</strong> Or, with the keyboard: Ctrl+Alt+4, then arrow down to &quot;Remove Images&quot;. In the toolbar, select &quot;CSS&quot;, then &quot;Disable CSS&quot;.
+- [Web Accessibility Checklist](https://www.webaccessibilitychecklist.com/) — <strong>Adding an HTML sitemap page (which links to every page on your website).</strong> Including a search function on every page. Providing a clear and consistent main navigation menu. ... Do not rely on hover states to convey information as this approach is not screen reader, keyboard or mobile accessible.
+- [Accessibility | MDN](https://developer.mozilla.org/en-US/docs/Web/Accessibility) — <strong>Accessibility</strong> (often abbreviated to A11y — as in, &quot;a&quot;, then 11 characters, and then &quot;y&quot;) in web development means enabling as many people as possible to use websites, even when those people&#x27;s abilities are limited in some way.
 

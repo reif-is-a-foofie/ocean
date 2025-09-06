@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 from .feed import feed as _feed
+import httpx
 
 
 class CodexUnavailable(Exception):
@@ -79,6 +80,9 @@ def _logged_in_via_codex() -> bool:
     - Legacy file at ~/.codex/auth.json exists
     """
     try:
+        # Explicit env hints first
+        if os.getenv("OCEAN_CODEX_AUTH") in ("1", "true", "True"):
+            return True
         if os.getenv("CODEX_AUTH_TOKEN"):
             return True
         codex = shutil.which("codex")
@@ -125,6 +129,10 @@ def generate_files(
     if not available():
         if force:
             raise CodexUnavailable("Codex CLI not available")
+        try:
+            _feed("🌊 Ocean: ❌ Codex CLI not found on PATH. Install 'codex' and retry.")
+        except Exception:
+            pass
         return None
 
     prompt_parts: list[str] = []
@@ -170,94 +178,160 @@ def generate_files(
         _last_mode = "subscription"
     elif env.get("OPENAI_API_KEY"):
         _last_mode = "api_fallback"
-        try:
-            _feed("🌊 Ocean: ⚠️ Using OpenAI API key FALLBACK for Codex exec. This may bill outside your subscription.")
-            _feed("🌊 Ocean: Set OCEAN_DISALLOW_API_FALLBACK=1 to block this fallback.")
-        except Exception:
-            pass
-        if env.get("OCEAN_DISALLOW_API_FALLBACK") in ("1", "true", "True"):
-            return None
+        # Defer to API fallback below (do not attempt CLI in this mode)
     else:
         _last_mode = "unavailable"
         if force:
             raise CodexUnavailable("Codex exec returned no JSON mapping")
+        try:
+            _feed("🌊 Ocean: ❌ Codex not authenticated and no OPENAI_API_KEY present. Run 'codex auth login' or export OPENAI_API_KEY.")
+        except Exception:
+            pass
         return None
 
-    logs_dir = Path("logs"); logs_dir.mkdir(parents=True, exist_ok=True)
-    log_file: Optional[Path] = None
-    if agent:
-        from datetime import datetime
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        log_file = logs_dir / f"codex-{agent.lower()}-{ts}.log"
-    # Add a simple retry with backoff for transient failures
-    attempts = 0
-    stdout = stderr = ""
-    while attempts < 2:
-        attempts += 1
+    # If in subscription mode, attempt CLI exec first; else skip to API fallback
+    if _last_mode == "subscription":
+        logs_dir = Path("logs"); logs_dir.mkdir(parents=True, exist_ok=True)
+        log_file: Optional[Path] = None
+        if agent:
+            from datetime import datetime
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            log_file = logs_dir / f"codex-{agent.lower()}-{ts}.log"
+        # Add a simple retry with backoff for transient failures
+        attempts = 0
+        stdout = stderr = ""
+        while attempts < 2:
+            attempts += 1
+            try:
+                # Prefer --prompt flag when supported to avoid stdin hangups
+                use_prompt_flag = os.getenv("OCEAN_CODEX_USE_STDIN") not in ("1", "true", "True")
+                if use_prompt_flag:
+                    proc = subprocess.run(
+                        [*cmd, "--prompt", full_prompt],
+                        capture_output=True,
+                        text=True,
+                        timeout=int(os.getenv("OCEAN_CODEX_TIMEOUT", str(timeout))),
+                        env=env,
+                    )
+                    stdout = (proc.stdout or "")
+                    stderr = (proc.stderr or "")
+                    # Fallback to stdin if flag unsupported
+                    if proc.returncode != 0 and "unexpected argument '--prompt'" in (stderr or ""):
+                        raise RuntimeError("codex --prompt unsupported; fallback to stdin")
+                else:
+                    proc = subprocess.run(
+                        cmd,
+                        input=full_prompt,
+                        capture_output=True,
+                        text=True,
+                        timeout=int(os.getenv("OCEAN_CODEX_TIMEOUT", str(timeout))),
+                        env=env,
+                    )
+                    stdout = (proc.stdout or "")
+                    stderr = (proc.stderr or "")
+                if stdout.strip():
+                    break
+            except Exception as e:
+                if attempts >= 2:
+                    if log_file:
+                        try:
+                            log_file.write_text(f"ERROR: {e}\n", encoding="utf-8")
+                        except Exception:
+                            pass
+                    _feed(f"🌊 Ocean: Codex exec error (agent={agent or 'Ocean'}): {e}")
+                    stdout = ""; stderr = str(e)
+                    break
+            # Backoff
+            try:
+                import time as _t
+                _t.sleep(6 * attempts)
+            except Exception:
+                pass
+
+        if log_file:
+            try:
+                log_file.write_text(
+                    """# Codex Exec Log\n\n## Command\n{cmd}\n\n## Instruction\n{instr}\n\n## STDOUT\n{out}\n\n## STDERR\n{err}\n""".format(
+                        cmd=" ".join(cmd), instr=instruction, out=stdout, err=stderr
+                    ),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+
+        # Try to parse as JSON directly
+        obj = None
         try:
-            proc = subprocess.run(
-                cmd,
-                input=full_prompt.encode("utf-8"),
-                capture_output=True,
-                timeout=timeout,
-                env=env,
-            )
-            stdout = (proc.stdout or b"").decode("utf-8", errors="ignore")
-            stderr = (proc.stderr or b"").decode("utf-8", errors="ignore")
-            if stdout.strip():
-                break
-        except Exception as e:
-            if attempts >= 2:
-                if log_file:
-                    try:
-                        log_file.write_text(f"ERROR: {e}\n", encoding="utf-8")
-                    except Exception:
-                        pass
-                # Emit to feed as well
-                _feed(f"🌊 Ocean: Codex exec error (agent={agent or 'Ocean'}): {e}")
+            obj = json.loads(stdout)
+        except Exception:
+            obj = _extract_json(stdout)
+        if isinstance(obj, dict):
+            # Interpret common shapes below
+            pass
+        else:
+            # Fall through to API fallback if available
+            if env.get("OPENAI_API_KEY"):
+                _last_mode = "api_fallback"
+            else:
+                # Emit concise logs to feed for diagnosis
+                try:
+                    mode = _last_mode
+                    model = os.getenv("OCEAN_CODEX_MODEL", "o4-mini")
+                    _feed(f"🌊 Ocean: Codex exec returned no JSON (agent={agent or 'Ocean'}, mode={mode}, model={model}).")
+                    def _head(text: str, n: int = 6) -> str:
+                        lines = (text or "").splitlines()
+                        return " | ".join(l.strip() for l in lines[:n] if l.strip())
+                    if stderr.strip():
+                        _feed(f"🌊 Ocean: Codex stderr: {_head(stderr)}")
+                    if stdout.strip():
+                        _feed(f"🌊 Ocean: Codex stdout: {_head(stdout)}")
+                except Exception:
+                    pass
                 return None
-        # Backoff
+
+    # If we are in API fallback, call OpenAI API directly using httpx
+    if _last_mode == "api_fallback" and env.get("OPENAI_API_KEY"):
         try:
-            import time as _t
-            _t.sleep(6 * attempts)
+            _feed("🌊 Ocean: Using OpenAI API fallback for codegen.")
         except Exception:
             pass
-
-    # Persist raw outputs to per-agent log for debugging/traceability
-    if log_file:
+        api_model = os.getenv("OCEAN_OPENAI_MODEL") or os.getenv("OCEAN_CODEX_MODEL", "gpt-4o-mini")
+        # Map common Codex shorthands to OpenAI models
+        if api_model.startswith("o4"):
+            api_model = "gpt-4o-mini"
+        headers = {
+            "Authorization": f"Bearer {env['OPENAI_API_KEY']}",
+            "Content-Type": "application/json",
+        }
+        messages = [
+            {"role": "system", "content": "You are a code generation tool. Return ONLY JSON: a mapping of file paths to full file contents."},
+            {"role": "user", "content": full_prompt},
+        ]
+        body = {"model": api_model, "messages": messages, "temperature": 0}
         try:
-            log_file.write_text(
-                """# Codex Exec Log\n\n## Command\n{cmd}\n\n## Instruction\n{instr}\n\n## STDOUT\n{out}\n\n## STDERR\n{err}\n""".format(
-                    cmd=" ".join(cmd), instr=instruction, out=stdout, err=stderr
-                ),
-                encoding="utf-8",
-            )
-        except Exception:
-            pass
-
-    # Try to parse as JSON directly
-    obj = None
-    try:
-        obj = json.loads(stdout)
-    except Exception:
-        obj = _extract_json(stdout)
+            resp = httpx.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body, timeout=timeout)
+            data = resp.json()
+            content = (((data.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
+            try:
+                obj = json.loads(content)
+            except Exception:
+                obj = _extract_json(content)
+            if not isinstance(obj, dict):
+                # Emit a head for debugging
+                try:
+                    _feed("🌊 Ocean: API fallback returned no JSON mapping.")
+                except Exception:
+                    pass
+                return None
+        except Exception as e:
+            try:
+                _feed(f"🌊 Ocean: OpenAI API fallback error: {e}")
+            except Exception:
+                pass
+            return None
+    
+    # By here, obj should be parsed from either CLI or API fallback
     if not isinstance(obj, dict):
-        # Emit concise logs to feed for diagnosis
-        try:
-            mode = _last_mode
-            model = os.getenv("OCEAN_CODEX_MODEL", "o4-mini")
-            sandbox = os.getenv("OCEAN_CODEX_SANDBOX", "read-only")
-            approval = os.getenv("OCEAN_CODEX_APPROVAL", "never")
-            _feed(f"🌊 Ocean: Codex exec returned no JSON (agent={agent or 'Ocean'}, mode={mode}, model={model}, sandbox={sandbox}, approval={approval}).")
-            def _head(text: str, n: int = 6) -> str:
-                lines = (text or "").splitlines()
-                return " | ".join(l.strip() for l in lines[:n] if l.strip())
-            if stderr.strip():
-                _feed(f"🌊 Ocean: Codex stderr: {_head(stderr)}")
-            if stdout.strip():
-                _feed(f"🌊 Ocean: Codex stdout: {_head(stdout)}")
-        except Exception:
-            pass
         return None
 
     # Interpret common shapes

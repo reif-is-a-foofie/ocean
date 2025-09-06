@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ocean"
-version = "0.2.6"
+version = "0.2.8"
 description = "OCEAN CLI/TUI multi-agent orchestrator"
 readme = "README.md"
 requires-python = ">=3.11"
