@@ -35,6 +35,10 @@ def _is_test_env() -> bool:
     the CLI (PYTEST_CURRENT_TEST is present)."""
     return (os.getenv("OCEAN_TEST") == "1") or (os.getenv("PYTEST_CURRENT_TEST") is not None)
 
+
+def _external_startup_disabled() -> bool:
+    return _is_test_env() or os.getenv("OCEAN_DISABLE_CODEX") in ("1", "true", "True")
+
 console = Console()
 # Route all console output through the feed by default to avoid column offsets and stray ANSI
 if os.getenv("OCEAN_FEED_ONLY", "1") not in ("0", "false", "False"):
@@ -155,6 +159,8 @@ def _ensure_codex_auth() -> None:
 
     Per user policy: re-auth every time (idempotent), ignore failures.
     """
+    if _external_startup_disabled():
+        return
     codex = shutil.which("codex")
     if not codex:
         return
@@ -307,6 +313,8 @@ def _install_docker() -> bool:
     return ran
 
 def _ensure_root_venv() -> None:
+    if _is_test_env():
+        return
     v = ROOT / "venv"
     if not v.exists():
         console.print("[dim]Creating project venv under ./venv…[/dim]")
@@ -517,6 +525,8 @@ def _warmup_codex(model: str | None = None, timeout: int = 25) -> None:
     - Sets OCEAN_CODEX_AUTH=1 on success
     - Emits one concise feed line only on failure
     """
+    if _external_startup_disabled():
+        return
     try:
         import shutil
         import subprocess
@@ -981,7 +991,7 @@ def chat(
             os.environ["OCEAN_APIKEY_ANNOUNCED"] = "1"
     except Exception:
         pass
-    
+
     # Create session log
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     log = LOGS / f"session-{timestamp}.log"
@@ -1006,24 +1016,27 @@ def chat(
     if os.getenv("OCEAN_STARTUP_DOCTOR", "1") not in ("0", "false", "False"):
         _doctor_lite()
     # Ocean Doctor disabled by default per user request
-    MCP.ensure_started(log)
+    if not _external_startup_disabled():
+        MCP.ensure_started(log)
     # Ensure project-level venv for convenience
     _ensure_root_venv()
     # Warm up Codex session early so codegen runs without delays
     _warmup_codex()
     # Quick e2e probe: prefer to warn rather than abort (unless strict)
-    try:
-        ok, detail = _codex_e2e_test(timeout=8)
-    except Exception:
-        ok, detail = False, "unknown error"
-    if not ok and os.getenv("OCEAN_DISABLE_CODEX") not in ("1", "true", "True"):
-        if os.getenv("OCEAN_STRICT_CODEX") in ("1", "true", "True"):
-            feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Run 'codex login' or set OPENAI_API_KEY. Aborting early.")
-            raise typer.Exit(code=2)
-        else:
-            feed(f"🌊 Ocean: ⚠️ Codex exec probe did not return JSON — {detail}. Continuing (non‑strict mode).")
+    if not _external_startup_disabled():
+        try:
+            ok, detail = _codex_e2e_test(timeout=8)
+        except Exception:
+            ok, detail = False, "unknown error"
+        if not ok:
+            if os.getenv("OCEAN_STRICT_CODEX") in ("1", "true", "True"):
+                feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Run 'codex login' or set OPENAI_API_KEY. Aborting early.")
+                raise typer.Exit(code=2)
+            else:
+                feed(f"🌊 Ocean: ⚠️ Codex exec probe did not return JSON — {detail}. Continuing (non‑strict mode).")
     # In feed mode we require Codex for codegen phases; errors are surfaced during plan/execute
-    MCP.status()
+    if not _external_startup_disabled():
+        MCP.status()
 
     # If PRD provided, persist to docs/prd.md
     if prd:
@@ -1082,6 +1095,11 @@ def chat(
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
         feed("🌊 Ocean: Assembling the crew…")
         _do_crew(log)
+        if _is_test_env():
+            feed("🌊 Ocean: Test mode: skipping planning and execution.")
+            feed("🌊 Ocean: Session complete.")
+            feed(f"📝 Session log: {log}")
+            return
         # Proceed with planning and execution, but keep Codex disabled in feed
         feed("🌊 Ocean: Creating your project plan…")
         # Preflight Codex check (dynamic), unless explicitly disabled for tests
@@ -1146,6 +1164,79 @@ def chat(
     except SystemExit:
         # deploy exits via typer.Exit; ignore here
         pass
+
+
+@app.command(name="mcp-server", help="Run Ocean as a stdio MCP server for Cursor/Codex")
+def mcp_server():
+    """Expose Ocean's product loop as MCP tools over stdio."""
+    from .mcp_server import main as run_mcp_server
+
+    run_mcp_server()
+
+
+@app.command(help="Start the React control room with a local API backend")
+def ui(
+    api_host: str = typer.Option("127.0.0.1", "--api-host", help="Host for the FastAPI backend"),
+    api_port: int = typer.Option(7777, "--api-port", help="Port for the FastAPI backend"),
+    ui_host: str = typer.Option("127.0.0.1", "--ui-host", help="Host for the Vite dev server"),
+    ui_port: int = typer.Option(5173, "--ui-port", help="Port for the Vite dev server"),
+):
+    """Run the chat-first React control room."""
+    ensure_repo_structure()
+    if not (BACKEND / "app.py").exists():
+        console.print("[red]❌ backend/app.py is missing.[/red]")
+        raise typer.Exit(code=1)
+    if not shutil.which("npm"):
+        console.print("[red]❌ npm is required to run the React control room.[/red]")
+        raise typer.Exit(code=1)
+
+    logs_dir = LOGS
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backend_log = logs_dir / f"ui-backend-{timestamp}.log"
+    ui_log = logs_dir / f"ui-frontend-{timestamp}.log"
+
+    backend_out = backend_log.open("a", encoding="utf-8")
+    ui_out = ui_log.open("a", encoding="utf-8")
+    backend_proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "backend.app:app", "--host", api_host, "--port", str(api_port)],
+        stdout=backend_out,
+        stderr=subprocess.STDOUT,
+    )
+    ui_proc = subprocess.Popen(
+        ["npm", "run", "dev", "--", "--host", ui_host, "--port", str(ui_port)],
+        stdout=ui_out,
+        stderr=subprocess.STDOUT,
+    )
+
+    console.print("[bold blue]🌊 OCEAN:[/bold blue] React control room started.")
+    console.print(f"🌐 API: http://{api_host}:{api_port}")
+    console.print(f"💬 UI: http://{ui_host}:{ui_port}")
+
+    try:
+        ui_proc.wait()
+    except KeyboardInterrupt:
+        console.print("\n👋 [yellow]Control room stopped by user.[/yellow]")
+    finally:
+        for proc in (ui_proc, backend_proc):
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+        for proc in (ui_proc, backend_proc):
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        for handle in (ui_out, backend_out):
+            try:
+                handle.close()
+            except Exception:
+                pass
 
 
 def _do_clarify(log: Path) -> None:
@@ -2420,6 +2511,9 @@ def _doctor_lite() -> None:
     """Print one-line startup diagnostics with light humor and no tables."""
     try:
         feed(f"🤿 Doctor: ocean {__version__} @ {Path.cwd()}")
+        if _external_startup_disabled():
+            feed("🤿 Doctor: external Codex startup disabled for this run")
+            return
         # codex path/version
         cpath = shutil.which("codex") or "(not found)"
         try:
@@ -2548,7 +2642,10 @@ def _auto_self_update_and_version() -> None:
     """Best-effort editable reinstall from home repo and print version."""
     try:
         repo_root = Path(__file__).resolve().parent.parent
-        if os.getenv("OCEAN_NO_SELF_UPDATE") not in ("1", "true", "True"):
+        if (
+            os.getenv("OCEAN_NO_SELF_UPDATE") not in ("1", "true", "True")
+            and not _is_test_env()
+        ):
             res = subprocess.run([sys.executable, "-m", "pip", "install", "-e", str(repo_root)], capture_output=True)
             if res.returncode == 0:
                 feed("🌊 Ocean: self-update OK")

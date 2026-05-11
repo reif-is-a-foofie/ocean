@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 ocean = "ocean.cli:entrypoint"
+ocean-mcp = "ocean.mcp_server:main"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

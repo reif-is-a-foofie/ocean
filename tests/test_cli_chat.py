@@ -59,3 +59,9 @@ def test_crew_command():
     r = runner.invoke(app, ["--help"])
     assert r.exit_code == 0
     assert "crew" in r.output
+
+
+def test_ui_command_is_listed():
+    r = runner.invoke(app, ["ui", "--help"])
+    assert r.exit_code == 0
+    assert "React control room" in r.output

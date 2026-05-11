@@ -82,3 +82,7 @@ logs/*.log
 # Project specific
 ocean.egg-info/
 .pytest_cache/
+.ocean/
+node_modules/
+ui/dist/
+*.tsbuildinfo

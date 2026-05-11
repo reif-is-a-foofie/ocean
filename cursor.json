@@ -1,6 +1,6 @@
 {
   "name": "Ocean",
-  "tagline": "OCEAN = OCEAN Creates Everything And (N)othing",
+  "tagline": "OCEAN can engineer Asinine Nonrequirements",
   "entry": "ocean",
   "agents": [
     {
@@ -30,8 +30,28 @@
       "role": "DevOps",
       "responsibilities": ["ci/cd", "docker", "deploy"],
       "mcp": { "provider": "stub", "perAgent": true }
+    },
+    {
+      "id": "feedback-scribe",
+      "name": "Feedback Scribe",
+      "role": "Doctrine Keeper",
+      "responsibilities": ["capture Reif feedback", "classify reactions", "update doctrine and tasks"],
+      "mcp": { "provider": "ocean", "tools": ["ocean_record_feedback", "ocean_turn"] }
+    },
+    {
+      "id": "product-manager",
+      "name": "Product Manager",
+      "role": "Value Protector",
+      "responsibilities": ["rank tasks by product value", "protect target user value", "choose smallest next useful change"],
+      "mcp": { "provider": "ocean", "tools": ["ocean_next_action", "ocean_turn"] }
     }
   ],
+  "mcpServers": {
+    "ocean": {
+      "command": "ocean-mcp",
+      "args": []
+    }
+  },
   "primitives": ["publish", "accept", "action", "submit", "confirm", "seal"],
   "milestones": [
     "M1: TUI + PRD ingest",
@@ -39,6 +59,7 @@
     "M3: Task lifecycle",
     "M4: Collaboration",
     "M5: Provision + runtime",
-    "M6: Real MCP integration"
+    "M6: Real MCP integration",
+    "M7: External Product Manager loop"
   ]
 }
