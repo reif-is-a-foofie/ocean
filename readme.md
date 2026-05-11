@@ -13,7 +13,7 @@ npm install
 npx ocean --help
 ```
 
-Needs **Node 18+** and **Python 3.11+** (`pip`). Skip auto-pip with `OCEAN_SKIP_PY_INSTALL=1 npm install`.
+Needs **Node 18+** and **Python 3.11+**. Postinstall creates `./venv` when missing (uses `python3.12` / `python3.11` / … on your PATH), upgrades **pip** (macOS Command Line Tools ships pip 21.x, which cannot install this repo’s editable setuptools layout). Skip auto-Python with `OCEAN_SKIP_PY_INSTALL=1 npm install`.
 
 **Without npm:** `python3 -m pip install -e .` then `python3 -m ocean`, or `./scripts/ocean`.
 
@@ -75,6 +75,30 @@ Ocean still has a terminal-first CLI, but it also ships a React control room for
 
 The **product shell** is a **fork of [Toad](https://github.com/batrachianai/toad)** — the rich terminal UI for coding agents. **This repo stays Ocean**: the orchestrator you **`ocean`** into from that fork (typically subprocess). Clarification, crew, backlog/plan, delegation to Codex/MCP, and session logs stay here; Toad owns picking agents, markdown UX, pickers, and shell ergonomics. Toad is **AGPL**; comply when distributing a combined stack.
 
+### First-run onboarding (Toad fork)
+
+`ocean chat` (default) orders: **welcome → codegen backend → credentials → crew intro → Moroni clarify (project) → plan**. Structured lines are appended to **`logs/events-*.jsonl`** when **`OCEAN_EVENTS_FILE`** is set (done automatically each session).
+
+- **TTY / secrets:** **`OCEAN_SKIP_OPENAI_KEY_PROMPT=1`** skips the interactive `OPENAI_API_KEY` capture for `openai_api`. **`OCEAN_SKIP_BACKEND_PROMPT=1`** keeps the default Codex backend without prompting when stdin is non-interactive — or set **`OCEAN_CODEGEN_BACKEND`** / call MCP **`ocean_set_codegen_backend`** from the host shell (Toad).
+
+Contract for TUI hosts is documented in [**docs/toad_first_run.md**](docs/toad_first_run.md).
+
+### Where is the Toad TUI?
+
+There is **no** bundled Toad UI in this repo. The richer terminal shell lives in the **[Toad](https://github.com/batrachianai/toad) fork** you run alongside Ocean. Here you get the **feed-style** `ocean chat`. **`ocean codex-chat`** is a legacy **Prompt Toolkit** chat helper — it is **not** Toad.
+
+### Codegen backend preference
+
+On an interactive TTY, Ocean can ask where codegen should run: **Codex CLI**, **OpenAI API** (`OPENAI_API_KEY`), **Cursor handoffs** (writes `docs/handoffs/` for Composer/Agent — no headless Cursor exec), or **plan-only**. The choice is saved to **`docs/ocean_prefs.json`**. Override with **`OCEAN_CODEGEN_BACKEND`** = `codex` \| `openai_api` \| `cursor_handoff` \| `dry_plan_only`. Use **`ocean mcp-server`** from Cursor for IDE integration.
+
+### Codex exec probe
+
+If **`codex exec`** fails (quota, billing, auth, etc.), Ocean **stops by default** when the backend is Codex. Set **`OCEAN_LOOSE_CODEX=1`** or **`OCEAN_STRICT_CODEX=0`** to continue with warnings only.
+
+### Ocean Doctor (preflight)
+
+Lines prefixed **Ocean Doctor (preflight)** at startup are **environment checks** (Codex path, token, sandbox), **not** crew personas. Run **`ocean doctor --explain`** for a one-line glossary.
+
 ## 🔧 Available Commands
 
 | Command | Description |
@@ -133,10 +157,12 @@ Ocean maintains product doctrine in the target repo:
 
 The MCP server exposes:
 
-- `ocean_turn` - record optional feedback and return the next highest-value instruction.
-- `ocean_next_action` - rank candidate tasks by user value, setup friction reduced, trust increased, demo power, dependency value, and risk.
-- `ocean_record_feedback` - turn reactions into durable doctrine and tasks.
-- `ocean_bootstrap_doctrine` - create missing doctrine files without overwriting existing files.
+- `ocean_turn` — record optional feedback and return the next highest-value instruction.
+- `ocean_next_action` — rank candidate tasks by user value, setup friction reduced, trust increased, demo power, dependency value, and risk.
+- `ocean_record_feedback` — turn reactions into durable doctrine and tasks.
+- `ocean_bootstrap_doctrine` — create missing doctrine files without overwriting existing files.
+- `ocean_health` — environment snapshot incl. **`valid_codegen_backends`** and recovery hints (useful for onboarding pickers).
+- `ocean_set_codegen_backend` — write **`docs/ocean_prefs.json`** from a non-interactive host (e.g. Toad subprocess without a backend prompt).
 
 Each turn, Ocean pulls bounded build context from the target repo, including git state, detected stack, key docs/manifests, test report, backlog, and file tree. It sends that context to the available reasoning brain, asks for strict JSON, parses the result, and returns `advisor_recommendation` plus coding-agent instructions.
 

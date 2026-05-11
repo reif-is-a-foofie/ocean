@@ -90,6 +90,42 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ["project_root"],
         },
     },
+    "ocean_set_codegen_backend": {
+        "description": (
+            "Persist codegen backend preference to docs/ocean_prefs.json (for non-TTY hosts e.g. Toad). "
+            "Valid values: codex | openai_api | cursor_handoff | dry_plan_only."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_root": {"type": "string", "description": "Absolute path to project repo root."},
+                "backend": {
+                    "type": "string",
+                    "description": "One of VALID_BACKENDS; written to codegen_backend.",
+                },
+            },
+            "required": ["backend"],
+        },
+    },
+    "ocean_health": {
+        "description": (
+            "Structured environment snapshot for auto-heal: codegen backend prefs, Codex/OpenAI probes, "
+            "and short recovery_hints agents can act on without scraping stderr."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project_root": {
+                    "type": "string",
+                    "description": "Optional absolute path; defaults to Ocean process cwd for prefs probe.",
+                },
+            },
+        },
+    },
+    "ocean_version": {
+        "description": "Ocean package version and Python runtime for upgrade/compatibility checks.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 }
 
 
@@ -136,11 +172,92 @@ def handle_ocean_bootstrap_doctrine(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def handle_ocean_health(args: dict[str, Any]) -> dict[str, Any]:
+    root_s = args.get("project_root")
+    cwd = Path(root_s).resolve() if root_s else Path.cwd()
+    from . import backends
+    from . import codex_client as cc
+
+    snap = backends.probe_snapshot(cwd)
+    backend = backends.get_codegen_backend(cwd)
+    codex_st = cc.check()
+    hints: list[str] = []
+    if backend == "openai_api" and not snap["openai_api_key"]:
+        hints.append(
+            "Backend is openai_api but OPENAI_API_KEY is unset; export it or set codegen_backend in docs/ocean_prefs.json."
+        )
+    if backend == "codex" and not snap["codex_cli"]:
+        hints.append(
+            "Backend is codex but `codex` is not on PATH; install the Codex CLI or switch codegen backend."
+        )
+    if backend == "codex" and codex_st.ok is False:
+        r = (codex_st.reason or "").strip()
+        hints.append(
+            "Codex check failed"
+            + (f": {r}" if r else "")
+            + "; run `codex auth login`, set OPENAI_API_KEY for api_fallback, or switch backend."
+        )
+    if not hints:
+        hints.append("No obvious config mismatches; if codegen still fails, run regression (`scripts/regression.sh`) or `ocean codex-test`.")
+    return {
+        "ocean_version": __version__,
+        "project_root": str(cwd),
+        "codegen_backend": backend,
+        "valid_codegen_backends": sorted(backends.VALID_BACKENDS),
+        "prefs": backends.load_prefs(cwd),
+        "probe": snap,
+        "codex_check_ok": codex_st.ok,
+        "codex_mode": codex_st.mode,
+        "codex_reason": getattr(codex_st, "reason", "") or "",
+        "recovery_hints": hints,
+        "mcp_instruction": "Act on recovery_hints first; then retry ocean_turn or bootstrap doctrine as needed.",
+    }
+
+
+def handle_ocean_set_codegen_backend(args: dict[str, Any]) -> dict[str, Any]:
+    from . import backends
+
+    raw = str(args.get("backend") or "").strip().lower()
+    if raw not in backends.VALID_BACKENDS:
+        return {
+            "ok": False,
+            "error": f"invalid backend: {raw!r}",
+            "valid_codegen_backends": sorted(backends.VALID_BACKENDS),
+            "mcp_instruction": "Choose a valid backend and call ocean_set_codegen_backend again.",
+        }
+    root_s = args.get("project_root")
+    cwd = Path(root_s).resolve() if root_s else Path.cwd()
+    backends.save_prefs({"codegen_backend": raw}, cwd)
+    backends.set_codegen_backend_env(raw)
+    return {
+        "ok": True,
+        "project_root": str(cwd),
+        "codegen_backend": raw,
+        "prefs_file": str(backends.prefs_path(cwd)),
+        "mcp_instruction": "For subprocess `ocean chat` without a TTY, export OCEAN_CODEGEN_BACKEND to match.",
+    }
+
+
+def handle_ocean_version(_args: dict[str, Any]) -> dict[str, Any]:
+    import sys as _sys
+
+    vi = _sys.version_info
+    py_ver = f"{vi.major}.{vi.minor}.{vi.micro}"
+    return {
+        "ocean_version": __version__,
+        "python_version": py_ver,
+        "mcp_instruction": f"Ocean {__version__} on Python {py_ver}",
+    }
+
+
 HANDLERS: dict[str, ToolHandler] = {
     "ocean_turn": handle_ocean_turn,
     "ocean_next_action": handle_ocean_next_action,
     "ocean_record_feedback": handle_ocean_record_feedback,
     "ocean_bootstrap_doctrine": handle_ocean_bootstrap_doctrine,
+    "ocean_set_codegen_backend": handle_ocean_set_codegen_backend,
+    "ocean_health": handle_ocean_health,
+    "ocean_version": handle_ocean_version,
 }
 
 

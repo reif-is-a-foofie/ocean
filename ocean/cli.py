@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import subprocess
@@ -25,7 +26,17 @@ from .mcp import MCP
 from . import context as ctx
 from . import codex_exec
 from .persona import voice_brief
-from .feed import feed as feed_line, you_say
+from .feed import feed as feed_line, you_say, agent_say as feed_agent_say
+from .personas import CREW_SUMMARY
+from .backends import (
+    VALID_BACKENDS,
+    get_codegen_backend,
+    prompt_codegen_backend_if_needed,
+    apply_backend_env_from_prefs,
+    probe_snapshot,
+)
+from .dotenv_merge import merge_dotenv_assignments
+from .events_emit import emit_setup
 
 
 def _is_test_env() -> bool:
@@ -68,6 +79,8 @@ BACKEND = ROOT / "backend"
 UI = ROOT / "ui"
 DEVOPS = ROOT / "devops"
 PROJECTS = ROOT / "projects"
+
+_preflight_intro_sent: bool = False
 
 
 def ensure_repo_structure() -> None:
@@ -524,6 +537,76 @@ def _hydrate_tokens() -> None:
     except Exception:
         pass
 
+
+def _interactive_secret_stdin() -> bool:
+    try:
+        return sys.stdin.isatty() and sys.stdout.isatty()
+    except Exception:
+        return False
+
+
+def _prompt_openai_api_key_if_needed() -> None:
+    """If OPENAI_API_KEY is unset, prompt (hidden) and merge into workspace ``.env``."""
+    if os.getenv("OPENAI_API_KEY", "").strip():
+        return
+    if os.getenv("OCEAN_SKIP_OPENAI_KEY_PROMPT") in ("1", "true", "True"):
+        return
+    if _is_test_env():
+        return
+    if os.getenv("OCEAN_ALLOW_QUESTIONS", "1") in ("0", "false", "False"):
+        return
+    emit_setup(
+        "question",
+        id="openai_api_key",
+        message="OPENAI_API_KEY required for openai_api backend (value is not logged).",
+        secure=True,
+    )
+    if not _interactive_secret_stdin():
+        emit_setup(
+            "info",
+            id="openai_api_key",
+            skipped="non_tty",
+            message="Set OPENAI_API_KEY in the environment or .env; interactive prompt needs a TTY.",
+        )
+        return
+    try:
+        raw = getpass.getpass("OPENAI_API_KEY (input hidden): ").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        emit_setup("info", id="openai_api_key", saved=False, empty=True)
+        return
+    merge_dotenv_assignments(ROOT / ".env", {"OPENAI_API_KEY": raw})
+    os.environ["OPENAI_API_KEY"] = raw
+    masked = (raw[:6] + "…") if len(raw) > 6 else "(set)"
+    emit_setup("phase_end", id="openai_api_key", saved=True, prefix_masked=masked)
+    feed(f"🌊 Ocean: OPENAI_API_KEY saved to .env (len={len(raw)}, prefix={masked})")
+
+
+def _run_setup_credentials(backend: str) -> None:
+    """Backend-specific credential steps (Codex auth, OpenAI key, or skip)."""
+    emit_setup("phase_start", id="credentials", codegen_backend=backend)
+    try:
+        if backend == "codex":
+            if not _external_startup_disabled():
+                _ensure_codex_auth()
+            emit_setup("info", id="credentials", codex_auth_attempted=not _external_startup_disabled())
+        elif backend == "openai_api":
+            _prompt_openai_api_key_if_needed()
+            _load_env_file(ROOT / ".env")
+        elif backend == "cursor_handoff":
+            feed(
+                "🌊 Ocean: cursor_handoff — no Ocean-side LLM key required; "
+                "use Cursor in the IDE and docs/handoffs/ once plans exist."
+            )
+            emit_setup("info", id="credentials", message="cursor_handoff_skip_llm_cred")
+        elif backend == "dry_plan_only":
+            feed("🌊 Ocean: dry_plan_only — backlog/plan only; no LLM credential for Ocean codegen.")
+            emit_setup("info", id="credentials", message="dry_plan_only_skip_llm_cred")
+    finally:
+        emit_setup("phase_end", id="credentials")
+
+
 def _warmup_codex(model: str | None = None, timeout: int = 25) -> None:
     """Warm Codex up without executing a model.
 
@@ -557,7 +640,10 @@ def _warmup_codex(model: str | None = None, timeout: int = 25) -> None:
             if os.getenv("OCEAN_CODEX_ANNOUNCED") != "1":
                 ver = (v.stdout or v.stderr or "").strip().splitlines()[:1]
                 try:
-                    feed("🌊 Ocean: Codex subscription active" + (f" ({ver[0]})" if ver else ""))
+                    feed(
+                        "🌊 Ocean: Codex auth OK (CLI responded); successful `codex exec` not verified until probe runs."
+                        + (f" ({ver[0]})" if ver else "")
+                    )
                 except Exception:
                     pass
                 os.environ["OCEAN_CODEX_ANNOUNCED"] = "1"
@@ -571,7 +657,10 @@ def _warmup_codex(model: str | None = None, timeout: int = 25) -> None:
             if os.getenv("OCEAN_CODEX_ANNOUNCED") != "1":
                 ver = (v.stdout or v.stderr or "").strip().splitlines()[:1]
                 try:
-                    feed("🌊 Ocean: Codex subscription active" + (f" ({ver[0]})" if ver else ""))
+                    feed(
+                        "🌊 Ocean: Codex auth OK (CLI responded); successful `codex exec` not verified until probe runs."
+                        + (f" ({ver[0]})" if ver else "")
+                    )
                 except Exception:
                     pass
                 os.environ["OCEAN_CODEX_ANNOUNCED"] = "1"
@@ -970,7 +1059,7 @@ def main(
         pass
 
 
-@app.command(help="Run the interactive flow: clarify → crew intros → planning → staging")
+@app.command(help="Run onboarding: codegen → credentials → crew → clarify → planning → staging")
 def chat(
     prd: Optional[str] = typer.Option(None, "--prd", help="Path to PRD file or '-' to read from stdin"),
     stage: bool = typer.Option(True, "--stage/--no-stage", help="Auto-deploy to local staging after build"),
@@ -981,16 +1070,6 @@ def chat(
     # Load environment from local .env if present (e.g., BRAVE_API_KEY)
     _hydrate_tokens()
     _load_env_file(ROOT / ".env")
-    # Announce again in case key came from workspace .env
-    try:
-        key = os.getenv("OPENAI_API_KEY")
-        if key and os.getenv("OCEAN_APIKEY_ANNOUNCED") != "1":
-            masked = (key[:6] + "…") if len(key) > 6 else "(set)"
-            feed(f"🌊 Ocean: OPENAI_API_KEY detected (len={len(key)}, prefix={masked})")
-            os.environ["OCEAN_APIKEY_ANNOUNCED"] = "1"
-    except Exception:
-        pass
-    # Announce again in case key came from workspace .env
     try:
         key = os.getenv("OPENAI_API_KEY")
         if key and os.getenv("OCEAN_APIKEY_ANNOUNCED") != "1":
@@ -1007,6 +1086,10 @@ def chat(
     # Create structured events file for TUI
     events_file = LOGS / f"events-{timestamp}.jsonl"
     os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
+    try:
+        events_file.touch(exist_ok=True)
+    except Exception:
+        pass
 
     try:
         from . import setup_flow as _setup_flow
@@ -1029,18 +1112,43 @@ def chat(
     except RuntimeError:
         pass
 
-    # Initialize Codex MCP and greet
+    emit_setup("phase_start", id="welcome")
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
-        # Skip block banner; use cheeky feed lines instead
-        _ensure_codex_auth()
         _auto_self_update_and_version()
         feed("🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship.")
         feed(f"🌊 Ocean: Workspace: {Path.cwd()}")
-        feed("🌊 Ocean: I’ll skim your repo, assemble the crew, and draft a plan.")
+        feed(
+            "🌊 Ocean: First we wire up codegen and credentials, meet your crew, "
+            "then Moroni captures your project."
+        )
     else:
-        # Traditional banner
         console.print(banner())
-        _ensure_codex_auth()
+        console.print(
+            "\n[bold blue]🌊 OCEAN:[/bold blue] Hello! We'll pick where codegen runs, sign you in when needed, "
+            "meet the crew, then capture what you're building.\n"
+        )
+    emit_setup("phase_end", id="welcome")
+
+    emit_setup("phase_start", id="backend_choice")
+    emit_setup("info", id="codegen_backend_probes", probe=probe_snapshot(Path.cwd()))
+    emit_setup(
+        "question",
+        id="codegen_backend",
+        message="Where should Ocean send codegen?",
+        choices=sorted(VALID_BACKENDS),
+    )
+    try:
+        _bk_choice = prompt_codegen_backend_if_needed(Path.cwd())
+        feed(f"🌊 Ocean: Codegen backend → {_bk_choice}")
+        emit_setup("answer", id="codegen_backend", codegen_backend=_bk_choice)
+    except Exception:
+        _bk_choice = get_codegen_backend()
+    emit_setup("phase_end", id="backend_choice")
+
+    _run_setup_credentials(get_codegen_backend())
+
+    _codex_startup_needed = get_codegen_backend() == "codex"
+
     # Startup doctor: one-line vibes check (humor included)
     if os.getenv("OCEAN_STARTUP_DOCTOR", "1") not in ("0", "false", "False"):
         _doctor_lite()
@@ -1049,20 +1157,39 @@ def chat(
         MCP.ensure_started(log)
     # Ensure project-level venv for convenience
     _ensure_root_venv()
-    # Warm up Codex session early so codegen runs without delays
-    _warmup_codex()
-    # Quick e2e probe: prefer to warn rather than abort (unless strict)
-    if not _external_startup_disabled():
+    # Warm up Codex session early so codegen runs without delays (Codex backend only)
+    if _codex_startup_needed:
+        _warmup_codex()
+    # Quick e2e probe when using Codex CLI backend
+    if _codex_startup_needed and not _external_startup_disabled():
         try:
-            ok, detail = _codex_e2e_test(timeout=8)
+            ok, detail, category = _codex_e2e_test(timeout=8)
         except Exception:
-            ok, detail = False, "unknown error"
+            ok, detail, category = False, "unknown error", None
         if not ok:
-            if os.getenv("OCEAN_STRICT_CODEX") in ("1", "true", "True"):
-                feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Run 'codex login' or set OPENAI_API_KEY. Aborting early.")
-                raise typer.Exit(code=2)
+            hint = ""
+            if category == "quota_billing":
+                hint = " Possible quota or billing limit — check your Codex/OpenAI account."
+            elif category == "rate_limit":
+                hint = " Rate limited — retry later."
+            elif category == "auth_permission":
+                hint = " Auth or permission issue — try `codex auth login`."
+            loose = (
+                os.getenv("OCEAN_LOOSE_CODEX") in ("1", "true", "True")
+                or os.getenv("OCEAN_STRICT_CODEX") in ("0", "false", "False")
+            )
+            if loose:
+                feed(
+                    f"🌊 Ocean: ⚠️ Codex exec probe failed ({category or 'unknown'}) — {detail}.{hint} "
+                    "Continuing (OCEAN_LOOSE_CODEX=1)."
+                )
             else:
-                feed(f"🌊 Ocean: ⚠️ Codex exec probe did not return JSON — {detail}. Continuing (non‑strict mode).")
+                feed(
+                    f"🌊 Ocean: ❌ Codex exec unavailable — {detail}.{hint} "
+                    "Fix auth/quota or switch backend (docs/ocean_prefs.json). "
+                    "Set OCEAN_LOOSE_CODEX=1 to continue anyway. Aborting."
+                )
+                raise typer.Exit(code=2)
     # In feed mode we require Codex for codegen phases; errors are surfaced during plan/execute
     if not _external_startup_disabled():
         MCP.status()
@@ -1083,19 +1210,34 @@ def chat(
             (DOCS / "prd.md").write_text(prd_text, encoding="utf-8")
             write_log(log, "[OCEAN] PRD saved to docs/prd.md", f"[OCEAN] PRD length: {len(prd_text)} chars")
     
+    emit_setup("phase_start", id="crew_intro")
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
-        pass
+        feed("🌊 Ocean: Assembling the crew…")
+        _do_crew(log)
     else:
-        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Hello! I'm OCEAN, your AI-powered software engineering orchestrator.")
-        console.print("I'll help you build your project by coordinating with my specialized crew.")
-        console.print("Let me start by understanding what you want to build...\n")
-    
-    # Do interactive prompts WITHOUT spinner to avoid input interference
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Here's your engineering crew.\n")
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task_c = progress.add_task("OCEAN is assembling the crew...", total=None)
+            _do_crew(log)
+            progress.update(task_c, completed=True, description="✅ OCEAN assembled the crew")
+    emit_setup("phase_end", id="crew_intro")
+
+    emit_setup("phase_start", id="project_clarify")
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
         feed("🌊 Ocean: Consulting with Moroni (Architect)…")
     else:
+        console.print("\n[bold blue]🌊 OCEAN:[/bold blue] Let's capture what you're building.")
         console.print("[dim]OCEAN is consulting with Moroni (Architect)…[/dim]")
     _do_clarify(log)
+    emit_setup("phase_end", id="project_clarify")
+
+    spec_after = _load_project_spec()
+    if spec_after and os.getenv("OCEAN_SIMPLE_FEED") == "1":
+        feed(f"🌊 Ocean: Project locked in → {spec_after.get('name', '?')}")
 
     # Optional CrewAI orchestration path (legacy). When OCEAN_CREWAI_BY_MORONI=1 (default),
     # Moroni will initialize CrewAI during agent execution instead of the CLI doing it here.
@@ -1122,8 +1264,6 @@ def chat(
 
     # Non-interactive phases: either spinner (default) or combined-feed prints (simple feed)
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
-        feed("🌊 Ocean: Assembling the crew…")
-        _do_crew(log)
         if _is_test_env():
             feed("🌊 Ocean: Test mode: skipping planning and execution.")
             feed("🌊 Ocean: Session complete.")
@@ -1131,8 +1271,16 @@ def chat(
             return
         # Proceed with planning and execution, but keep Codex disabled in feed
         feed("🌊 Ocean: Creating your project plan…")
-        # Preflight Codex check (dynamic), unless explicitly disabled for tests
-        if os.getenv("OCEAN_DISABLE_CODEX") not in ("1", "true", "True"):
+        # Preflight codegen readiness (depends on saved backend)
+        _be_preflight = get_codegen_backend()
+        if _be_preflight == "openai_api":
+            if not os.getenv("OPENAI_API_KEY"):
+                feed("🌊 Ocean: ❌ Backend openai_api requires OPENAI_API_KEY.")
+                raise typer.Exit(code=1)
+            feed("🌊 Ocean: Preflight: using OpenAI API backend (skipping Codex CLI check).")
+        elif _be_preflight in ("cursor_handoff", "dry_plan_only"):
+            feed(f"🌊 Ocean: Preflight: backend={_be_preflight} (skipping Codex execution readiness).")
+        elif os.getenv("OCEAN_DISABLE_CODEX") not in ("1", "true", "True"):
             try:
                 from . import codex_client as _cc
                 st = _cc.check()
@@ -1165,10 +1313,6 @@ def chat(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task2 = progress.add_task("OCEAN is assembling the crew...", total=None)
-            _do_crew(log)
-            progress.update(task2, completed=True, description="✅ OCEAN assembled the crew")
-
             if _is_test_env():
                 console.print("[dim]Test mode: skipping planning and execution.[/dim]")
                 console.print("\n🎉 [green]OCEAN has completed your project setup![/green]")
@@ -1362,13 +1506,25 @@ def _do_clarify(log: Path) -> None:
 
 
 def _do_crew(log: Path) -> None:
-    """OCEAN assembles and introduces the crew"""
+    """OCEAN assembles and introduces the crew.
+
+    If ``docs/project.json`` is missing (e.g. before Moroni clarify), uses the
+    current directory name as a display label only — nothing is written to disk.
+    """
     ensure_repo_structure()
     spec = _load_project_spec()
     if not spec:
-        console.print("[yellow]⚠️ No project spec found. Run 'ocean clarify' first.[/yellow]")
-        raise typer.Exit(code=1)
-    
+        label = Path.cwd().name or "this workspace"
+        spec = {
+            "name": label,
+            "kind": "cli",
+            "description": "",
+            "goals": [],
+            "constraints": [],
+            "createdAt": datetime.now().isoformat(),
+        }
+        feed("🌊 Ocean: Introducing the crew — we’ll lock in your project details next.")
+
     write_log(log, "[OCEAN] Assembling crew for project:", json.dumps(spec))
     
     feed(f"🌊 Ocean: Assembling the crew for '{spec['name']}'…")
@@ -1376,17 +1532,13 @@ def _do_crew(log: Path) -> None:
     
     crew_lines: list[tuple[str, str, str]] = []
     for agent in default_agents():
-        intro = agent.introduce()
-        feed(f"{intro}")
-        write_log(log, intro)
-        if "Moroni" in intro:
-            crew_lines.append(("Moroni", "Architect & Brain", "Vision, Planning, Coordination"))
-        elif "Q" in intro:
-            crew_lines.append(("Q", "Backend Engineer", "APIs, Services, Data Models"))
-        elif "Edna" in intro:
-            crew_lines.append(("Edna", "Designer & UI/UX", "Interfaces, Design Systems"))
-        elif "Mario" in intro:
-            crew_lines.append(("Mario", "DevOps & Infrastructure", "CI/CD, Deployment, Monitoring"))
+        intro_full = agent.introduce()
+        feed_agent_say(agent.name, agent.introduce_detail())
+        write_log(log, intro_full)
+        summary = CREW_SUMMARY.get(agent.name)
+        if summary:
+            role_sp, spec_sp = summary
+            crew_lines.append((agent.name, role_sp, spec_sp))
     if os.getenv("OCEAN_SIMPLE_FEED") != "1":
         crew_table = Table(title="🤖 The OCEAN Crew (Assembled by OCEAN)")
         crew_table.add_column("Agent", style="cyan", no_wrap=True)
@@ -2018,6 +2170,7 @@ def autostart():
     """
     ensure_repo_structure()
     _load_env_file(ROOT / ".env")
+    apply_backend_env_from_prefs(Path.cwd())
     # Create structured events file for the session
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     events_file = LOGS / f"events-{timestamp}.jsonl"
@@ -2053,31 +2206,41 @@ def loop(
     """
     ensure_repo_structure()
     _load_env_file(ROOT / ".env")
-    # Hydrate API keys and ensure Codex auth so codegen works in loop mode
+    apply_backend_env_from_prefs(Path.cwd())
+    _bk_loop = get_codegen_backend()
+    # Hydrate API keys and ensure Codex auth so codegen works in loop mode (Codex backend only)
     _hydrate_tokens()
-    _ensure_codex_auth()
-    _warmup_codex()
-    # Verify Codex exec works before entering long iteration
-    try:
-        ok, detail = _codex_e2e_test(timeout=8)
-    except Exception:
-        ok, detail = False, "unknown error"
-    if not ok:
-        feed(f"🌊 Ocean: ❌ Codex exec unavailable — {detail}. Waiting for auth/key… (retrying). Try 'codex login'.")
-        # Retry loop: wait in short intervals until available
-        import time as _t
-        for _ in range(6):  # ~48s total
-            _t.sleep(4)
-            try:
-                ok, detail = _codex_e2e_test(timeout=6)
-            except Exception:
-                ok = False
-            if ok:
-                feed("🌊 Ocean: Codex exec OK. Proceeding with iteration.")
-                break
+    if _bk_loop == "openai_api":
+        if not os.getenv("OPENAI_API_KEY"):
+            feed("🌊 Ocean: ❌ Backend openai_api requires OPENAI_API_KEY.")
+            raise typer.Exit(code=1)
+    elif _bk_loop == "codex":
+        _ensure_codex_auth()
+        _warmup_codex()
+        # Verify Codex exec works before entering long iteration
+        try:
+            ok, detail, cat = _codex_e2e_test(timeout=8)
+        except Exception:
+            ok, detail, cat = False, "unknown error", None
         if not ok:
-            feed("🌊 Ocean: ❌ Codex still not ready. Exiting loop to save time.")
-            raise typer.Exit(code=2)
+            cat_s = f" [{cat}]" if cat else ""
+            feed(f"🌊 Ocean: ❌ Codex exec unavailable{cat_s} — {detail}. Waiting for auth/key… (retrying). Try 'codex login'.")
+            # Retry loop: wait in short intervals until available
+            import time as _t
+            for _ in range(6):  # ~48s total
+                _t.sleep(4)
+                try:
+                    ok, detail, cat = _codex_e2e_test(timeout=6)
+                except Exception:
+                    ok, detail, cat = False, "unknown error", None
+                if ok:
+                    feed("🌊 Ocean: Codex exec OK. Proceeding with iteration.")
+                    break
+            if not ok:
+                feed("🌊 Ocean: ❌ Codex still not ready. Exiting loop to save time.")
+                raise typer.Exit(code=2)
+    else:
+        feed(f"🌊 Ocean: Loop mode with backend={_bk_loop} (skipping Codex warmup/exec probe).")
     # Set up a single events file for the session
     if not os.getenv("OCEAN_EVENTS_FILE"):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2297,9 +2460,6 @@ def scout():
         pass
     raise typer.Exit(code=0)
 
-if __name__ == "__main__":
-    app()
-
 
 def entrypoint():
     # If no args were provided, default to invoking the `chat` command via Typer
@@ -2311,7 +2471,14 @@ def entrypoint():
 
 
 @app.command(help="Diagnose environment and Codex CLI readiness")
-def doctor():
+def doctor(
+    explain: bool = typer.Option(False, "--explain", help="Describe Doctor vs crew agents"),
+):
+    if explain:
+        console.print(
+            "[dim]Ocean Doctor is preflight diagnostics (Codex, tokens, sandbox). "
+            "It is not a crew agent. Crew: Moroni, Q, Edna, Mario, Tony — each has its own role in planning and codegen.[/dim]"
+        )
     _run_doctor_quick(full=True)
 
 
@@ -2391,20 +2558,59 @@ def _run_doctor_quick(full: bool = False) -> None:
             auth = "run 'codex login'"
     table.add_row("codex auth", auth)
 
+    try:
+        table.add_row("codegen backend", get_codegen_backend())
+    except Exception:
+        table.add_row("codegen backend", "(unknown)")
+
     # Optional end-to-end exec test (fast, token-free if subscription)
     try:
-        ok, detail = _codex_e2e_test()
-        table.add_row("codex exec (e2e)", detail if ok else f"error: {detail}")
+        ok, detail, cat = _codex_e2e_test()
+        row = detail if ok else f"error: {detail}"
+        if cat and not ok:
+            row += f" [{cat}]"
+        table.add_row("codex exec (e2e)", row)
     except Exception as e:
         table.add_row("codex exec (e2e)", f"error: {e}")
 
     console.print(table)
 
 
-def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str]:
+def classify_codex_exec_failure(combined_text: str) -> Optional[str]:
+    """Best-effort bucket for Codex CLI stderr/stdout when JSON probe fails."""
+    if not (combined_text or "").strip():
+        return None
+    t = combined_text.lower()
+    rules: list[tuple[str, tuple[str, ...]]] = [
+        (
+            "quota_billing",
+            (
+                "quota",
+                "billing",
+                "credit",
+                "balance",
+                "payment required",
+                "insufficient",
+                "out of credits",
+                "no credits",
+                "usage limit",
+                "spend limit",
+            ),
+        ),
+        ("rate_limit", ("429", "rate limit", "too many requests")),
+        ("auth_permission", ("401", "403", "unauthorized", "forbidden", "invalid token", "token expired", "not authenticated")),
+    ]
+    for label, needles in rules:
+        if any(n in t for n in needles):
+            return label
+    return "unknown_exec_failure"
+
+
+def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str, Optional[str]]:
     """Tiny end-to-end check of `codex exec` without heavy cost.
 
-    Sends a trivial instruction asking for `{}` JSON; returns (ok, detail).
+    Sends a trivial instruction asking for `{}` JSON; returns (ok, detail, failure_category).
+    failure_category is set only when ok is False.
     """
     import shutil
     import subprocess
@@ -2412,7 +2618,7 @@ def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str]:
     import os as _os
     codex = shutil.which("codex")
     if not codex:
-        return False, "codex not found"
+        return False, "codex not found", None
     prompt = "Return ONLY JSON object {}."
     try:
         # Defaults: search ON; sandbox ON (workspace-write); bypass only if explicitly enabled
@@ -2468,9 +2674,13 @@ def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str]:
                 lm = last_path.read_text(encoding="utf-8")
                 obj = _json.loads(lm)
             except Exception:
-                pass
+                try:
+                    from .codex_exec import _extract_json as _x2
+                    obj = _x2(lm)
+                except Exception:
+                    obj = None
         if isinstance(obj, dict):
-            return True, "ok"
+            return True, "ok", None
         # Produce a more actionable failure string for doctor table and early abort
         rc = proc.returncode
         head_err = (err.strip().splitlines()[:8]) if err.strip() else []
@@ -2481,22 +2691,24 @@ def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str]:
             _cmd = _cmd[:-1] + ["…PROMPT…"]
         cmd_repr = " ".join(_cmd)
         detail = f"rc={rc}; cmd={cmd_repr}; err={' | '.join(head_err)}; out={' | '.join(head_out)}"
-        return False, detail
+        cat = classify_codex_exec_failure(err + "\n" + out)
+        return False, detail, cat
     except subprocess.TimeoutExpired:
-        return False, "timeout"
+        return False, "timeout", "unknown_exec_failure"
     except Exception as e:
-        return False, str(e)
+        return False, str(e), classify_codex_exec_failure(str(e))
 
 
 @app.command(help="Quick Codex E2E test (no heavy usage)")
 def codex_test():
     """Run a tiny codex exec to validate end-to-end readiness and print a one-line result."""
-    ok, detail = _codex_e2e_test()
+    ok, detail, cat = _codex_e2e_test()
     if ok:
         feed(f"🌊 Ocean: Codex E2E: {detail}")
         raise typer.Exit(code=0)
     else:
-        feed(f"🌊 Ocean: ❌ Codex E2E failed: {detail}")
+        extra = f" [{cat}]" if cat else ""
+        feed(f"🌊 Ocean: ❌ Codex E2E failed: {detail}{extra}")
         raise typer.Exit(code=1)
 
 
@@ -2576,34 +2788,39 @@ def cleanup_apply():
 
 def _doctor_lite() -> None:
     """Print one-line startup diagnostics with light humor and no tables."""
+    global _preflight_intro_sent
     try:
-        feed(f"🤿 Doctor: ocean {__version__} @ {Path.cwd()}")
+        if not _preflight_intro_sent:
+            feed("🤿 Ocean Doctor (preflight): Checks Codex/auth/sandbox — not a crew agent.")
+            _preflight_intro_sent = True
+        feed(f"🤿 Ocean Doctor (preflight): ocean {__version__} @ {Path.cwd()}")
         if _external_startup_disabled():
-            feed("🤿 Doctor: external Codex startup disabled for this run")
+            feed("🤿 Ocean Doctor (preflight): external Codex startup disabled for this run")
             return
         # codex path/version
         cpath = shutil.which("codex") or "(not found)"
         try:
             cv = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=5)
             cver = (cv.stdout or cv.stderr or "").strip().splitlines()[:1]
-            feed(f"🤿 Doctor: codex={cpath} ver={(cver[0] if cver else 'n/a')} (splash!)")
+            feed(f"🤿 Ocean Doctor (preflight): codex={cpath} ver={(cver[0] if cver else 'n/a')} (splash!)")
         except Exception:
-            feed(f"🤿 Doctor: codex={cpath} (bring floaties)")
+            feed(f"🤿 Ocean Doctor (preflight): codex={cpath} (bring floaties)")
         # token status
         tok = os.getenv("CODEX_AUTH_TOKEN") or ""
         src = os.getenv("OCEAN_CODEX_TOKEN_SOURCE") or "-"
         tshort = (tok[:6] + "…" + tok[-6:]) if len(tok) >= 16 else ("(set)" if tok else "(none)")
-        feed(f"🤿 Doctor: token={'yes' if tok else 'no'} src={src} preview={tshort}")
+        feed(f"🤿 Ocean Doctor (preflight): token={'yes' if tok else 'no'} src={src} preview={tshort}")
         # sandbox/search/profile snapshot
         search = os.getenv("OCEAN_CODEX_SEARCH", "0")
         bypass = os.getenv("OCEAN_CODEX_BYPASS_SANDBOX", "1")
         sb = os.getenv("OCEAN_CODEX_SANDBOX") or ("bypass" if bypass not in ("0","false","False") else "(default)")
         ap = os.getenv("OCEAN_CODEX_APPROVAL") or "(default)"
         prof = os.getenv("OCEAN_CODEX_PROFILE") or "(none)"
-        feed(f"🤿 Doctor: search={'on' if search in ('1','true','True') else 'off'} sandbox={sb} approval={ap} profile={prof}")
+        feed(f"🤿 Ocean Doctor (preflight): search={'on' if search in ('1','true','True') else 'off'} sandbox={sb} approval={ap} profile={prof}")
         # exec probe
-        ok, detail = _codex_e2e_test(timeout=8)
-        feed(f"🤿 Doctor: exec={'ok' if ok else 'nope'} — {detail if detail else 'no details'}")
+        ok, detail, cat = _codex_e2e_test(timeout=8)
+        catbit = f" [{cat}]" if (not ok and cat) else ""
+        feed(f"🤿 Ocean Doctor (preflight): exec={'ok' if ok else 'nope'}{catbit} — {detail if detail else 'no details'}")
         # CrewAI status
         enabled = os.getenv("OCEAN_USE_CREWAI", "1") not in ("0", "false", "False")
         try:
@@ -2612,9 +2829,9 @@ def _doctor_lite() -> None:
             installed = True
         except Exception:
             installed = False
-        feed(f"🤿 Doctor: crewai={'enabled' if enabled else 'disabled'}, installed={'yes' if installed else 'no'} — backbone ready? {'aye' if (enabled and installed) else 'nay'}")
+        feed(f"🤿 Ocean Doctor (preflight): crewai={'enabled' if enabled else 'disabled'}, installed={'yes' if installed else 'no'} — backbone ready? {'aye' if (enabled and installed) else 'nay'}")
     except Exception as e:
-        feed(f"🤿 Doctor: hiccup — {e}")
+        feed(f"🤿 Ocean Doctor (preflight): hiccup — {e}")
 
 
 @token_app.command("doctor", help="Diagnose Codex token: presence, source, expiry, and CLI auth state")
@@ -2725,3 +2942,7 @@ def _auto_self_update_and_version() -> None:
         feed(f"🌊 Ocean v{_v}: starting up…")
     except Exception:
         pass
+
+
+if __name__ == "__main__":
+    app()
