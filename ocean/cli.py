@@ -315,6 +315,14 @@ def _install_docker() -> bool:
 def _ensure_root_venv() -> None:
     if _is_test_env():
         return
+    try:
+        from . import setup_flow as _sf
+
+        if _sf.resolve_ocean_repo_root().resolve() == Path.cwd().resolve():
+            # ocean repo: chat() already ran ensure_smart()
+            return
+    except RuntimeError:
+        pass
     v = ROOT / "venv"
     if not v.exists():
         console.print("[dim]Creating project venv under ./venv…[/dim]")
@@ -999,7 +1007,28 @@ def chat(
     # Create structured events file for TUI
     events_file = LOGS / f"events-{timestamp}.jsonl"
     os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
-    
+
+    try:
+        from . import setup_flow as _setup_flow
+
+        _repo_hint = _setup_flow.resolve_ocean_repo_root()
+        if (
+            _repo_hint.resolve() == Path.cwd().resolve()
+            and not _is_test_env()
+            and os.getenv("OCEAN_SKIP_AUTO_SETUP", "").lower() not in ("1", "true", "yes")
+        ):
+            _code = _setup_flow.ensure_smart(
+                _repo_hint,
+                console=console,
+                notify=feed_line,
+                full_pytest=False,
+                prefer_venv=True,
+            )
+            if _code != 0:
+                feed_line(f"🌊 Ocean: Automatic dev setup reported exit code {_code}.")
+    except RuntimeError:
+        pass
+
     # Initialize Codex MCP and greet
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
         # Skip block banner; use cheeky feed lines instead
@@ -1465,11 +1494,49 @@ def crew():
     _do_crew(log)
 
 
+@app.command(help="First-run dev setup: venv, pip install -e ., pytest, then doctor")
+def onboard(
+    skip_tests: bool = typer.Option(False, "--skip-tests", help="Skip pytest"),
+    skip_venv: bool = typer.Option(False, "--skip-venv", help="Use current interpreter only (no venv/)"),
+):
+    """Prepare local Python env and verify tests before using Codex/chat."""
+    ensure_repo_structure()
+    try:
+        from . import setup_flow as _setup_flow
+
+        repo = _setup_flow.resolve_ocean_repo_root()
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+    code = _setup_flow.run_dev_ready(repo, console=console, skip_tests=skip_tests, skip_venv=skip_venv)
+    if code != 0:
+        raise typer.Exit(code)
+    _run_doctor_quick(full=False)
+    console.print("\n[cyan]Next:[/cyan] [bold]ocean[/bold] or [bold]ocean chat[/bold].")
+
+
 @app.command(help="Generate/refresh scaffolds for backend, UI, CI, docs")
-def init(force: bool = typer.Option(False, "--force", help="Overwrite existing files")):
+def init(
+    setup: bool = typer.Option(False, "--setup", help="Dev setup: venv, pip install -e ., pytest, then doctor"),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files"),
+):
     """Generate project scaffolds using AI agents"""
     ensure_repo_structure()
-    
+    if setup:
+        try:
+            from . import setup_flow as _setup_flow
+
+            repo = _setup_flow.resolve_ocean_repo_root()
+        except RuntimeError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(2)
+        code = _setup_flow.run_dev_ready(repo, console=console, skip_tests=False, skip_venv=False)
+        if code != 0:
+            raise typer.Exit(code)
+        _run_doctor_quick(full=False)
+        console.print("\n[cyan]Next:[/cyan] [bold]ocean[/bold] or [bold]ocean chat[/bold] for the SDLC flow.")
+        return
+
     console.print("[bold blue]🌊 OCEAN:[/bold blue] This command is deprecated!")
     console.print("[bold blue]🌊 OCEAN:[/bold blue] Run 'ocean' to start the full AI-powered experience.")
     console.print("[bold blue]🌊 OCEAN:[/bold blue] My agents will generate and execute everything automatically.")

@@ -1,0 +1,12 @@
+---
+description: Run or open the Ocean orchestrator CLI in this repo
+globs: []
+alwaysApply: false
+---
+
+When the user asks to run, open, or start **Ocean**, use the npm-installed CLI from the **repository root**:
+
+1. Run `npm install` if `node_modules/` is missing or `package.json` / lockfile changed.
+2. Run **`npx ocean`** (or **`npm start`**) plus any flags/subcommands they asked for (e.g. `npx ocean chat`, `npx ocean --help`).
+
+Do not assume `ocean` is on the shell PATH unless they installed globally (`npm install -g .`). Prefer **`npx ocean`** for clones.

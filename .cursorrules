@@ -2,10 +2,13 @@
 
 ## Objective
 
-Implement OCEAN — a CLI/TUI multi‑agent orchestrator that spins up a Codex‑powered software engineering team on demand — as a series of small, verifiable milestones. Cursor should follow these atomic tasks, produce incremental deliverables, and persist all artifacts in the repository.
+Implement OCEAN — a CLI multi‑agent **orchestrator** between the user and coding agents (Codex, MCP, etc.) — as a series of small, verifiable milestones. Cursor should follow these atomic tasks, produce incremental deliverables, and persist all artifacts in the repository.
+
+**Product integration:** The intended UX is a **fork of [Toad](https://github.com/batrachianai/toad)** that invokes **`ocean`**; keep orchestration and agent personas in this repo, not a full duplicate TUI. Respect **AGPL** when coupling distributions.
 
 ## Global Guardrails
 
+- **Install / run via npm:** From repo root `npm install` wires the **`ocean`** CLI (`package.json` → `bin/ocean.js`) and runs **`pip install -e .`** in postinstall (skip with `OCEAN_SKIP_PY_INSTALL=1`). To open the orchestrator when the user asks for Ocean: **`npx ocean`** or **`npm start`** from the repo root (after `npm install` if needed).
 - Single entrypoint: `ocean` (no args) runs the conversation (clarify → crew intros) and writes to a single session log.
 - Cross‑platform: macOS, Linux; Python 3.11+.
 - Keep changes minimal and focused per milestone; no unrelated refactors.

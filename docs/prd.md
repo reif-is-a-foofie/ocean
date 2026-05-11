@@ -14,4 +14,4 @@
 
 ## Detected
 - Kind: web
-- Tech: Python/pyproject, requirements.txt, Dockerfile, GitHub Actions
+- Tech: Python/pyproject, requirements.txt, Node/package.json, Dockerfile, GitHub Actions

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Launcher when `ocean` is not installed on PATH (fresh clone).
+# Usage from repo root: ./scripts/ocean | or: PATH="$(pwd)/scripts:$PATH" ocean
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+if [[ -x "$ROOT/venv/bin/ocean" ]]; then
+  exec "$ROOT/venv/bin/ocean" "$@"
+fi
+if [[ -x "$ROOT/venv/bin/python3" ]]; then
+  exec "$ROOT/venv/bin/python3" -m ocean "$@"
+fi
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 -m ocean "$@"
+fi
+echo "ocean: need Python 3.11+ (python3) on PATH, or run: python3 -m venv venv && ./venv/bin/pip install -e ." >&2
+exit 127

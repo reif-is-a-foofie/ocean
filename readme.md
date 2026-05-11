@@ -2,58 +2,88 @@
 
 OCEAN (OCEAN can engineer Asinine Nonrequirements) is a **CLI/TUI multi-agent orchestrator** that spins up a software engineering team on demand.
 
-## 🚀 Quick Start
+**What we're solving:** teams shouldn’t need humans to **manually coordinate** every engineering step across disparate tools. **Ocean sits between you and your coding agents** (Codex CLI, OpenAI-backed codegen, MCP tools, etc.) — it runs clarification, planning, delegation, and handoff so delivery stays **orchestrated** instead of ad hoc chat sprawl.
 
-### 1. Setup Environment
-```bash
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -e .
-```
+### `ocean`: command not found?
 
-### 2. Install Globally (Optional)
-```bash
-# Create global symlink (requires sudo)
-sudo ln -sf "$(pwd)/ocean" /usr/local/bin/ocean
-```
+Use **npm** from the repo root (that installs the CLI + Python editable):
 
-### 3. Run OCEAN
-```bash
-# Start the full interactive experience
-ocean
-
-# Or run specific commands:
-ocean --help          # Show all commands
-ocean clarify         # Project clarification with Moroni
-ocean crew            # Meet the OCEAN crew
-ocean test            # Run tests
-```
-
-### 4. Start The React Control Room
 ```bash
 npm install
-ocean ui
+npx ocean --help
 ```
 
-Then open `http://127.0.0.1:5173/` for the chat-first React interface. The API runs on `http://127.0.0.1:7777/`.
+Needs **Node 18+** and **Python 3.11+** (`pip`). Skip auto-pip with `OCEAN_SKIP_PY_INSTALL=1 npm install`.
+
+**Without npm:** `python3 -m pip install -e .` then `python3 -m ocean`, or `./scripts/ocean`.
+
+### Cursor / assistants
+
+When asked to **run or open Ocean**, from repo root: `npm install` if needed, then **`npx ocean`** or **`npm start`**.
+
+## 🚀 Quick Start
+
+### 1. Install (npm — primary)
+
+```bash
+cd /path/to/ocean
+npm install
+npx ocean                  # full interactive flow (default command)
+npx ocean onboard          # optional: venv + pytest gate
+```
+
+Global CLI (optional): `npm install -g .` → then bare `ocean` works everywhere.
+
+### 2. Python-only (optional)
+
+```bash
+python3 -m pip install -e .
+python3 -m ocean
+```
+
+### 3. Common commands
+
+```bash
+npx ocean --help
+npx ocean clarify
+npx ocean crew
+npx ocean test
+```
+
+### 4. React control room
+
+```bash
+npm install    # already done for CLI
+npm run dev    # Vite — open http://127.0.0.1:5173/
+npx ocean ui   # Ocean-managed UI + API when you use this flow
+```
+
+API default `http://127.0.0.1:7777/` when using `ocean ui`.
 
 ## 🎯 What OCEAN Does
 
-OCEAN is a **terminal-based orchestrator** that:
+OCEAN is a **terminal-based orchestrator** — your **interface to coding agents**, not a replacement for them:
 
-1. **🤖 Clarifies your vision** - Moroni asks questions to understand your project
-2. **👥 Assembles your team** - Spins up specialized AI agents (Q, Edna, Mario)
-3. **📋 Creates your plan** - Generates project backlog and execution plan
-4. **🚀 Scaffolds your project** - Creates initial project structure and files
+1. **🤖 Clarifies your vision** - Moroni captures intent so agents don’t thrash
+2. **👥 Assembles your crew** - Named personas own slices of the SDLC (architecture, implementation, design, ops)
+3. **📋 Turns intent into work** - Backlog and plan so agents know what to do next
+4. **🚀 Delegates execution** - Hands tasks to codegen/tools while keeping one session log and repo truth
 
 Ocean still has a terminal-first CLI, but it also ships a React control room for direct chat, file inspection, feedback capture, and job handoff.
+
+## 🐸 Toad fork + Ocean
+
+The **product shell** is a **fork of [Toad](https://github.com/batrachianai/toad)** — the rich terminal UI for coding agents. **This repo stays Ocean**: the orchestrator you **`ocean`** into from that fork (typically subprocess). Clarification, crew, backlog/plan, delegation to Codex/MCP, and session logs stay here; Toad owns picking agents, markdown UX, pickers, and shell ergonomics. Toad is **AGPL**; comply when distributing a combined stack.
 
 ## 🔧 Available Commands
 
 | Command | Description |
 |---------|-------------|
-| `ocean` | **Main experience** - Full interactive flow (clarify → crew → plan) |
+| `npm install` | **Primary install** — Node deps + `bin/ocean`; postinstall runs `pip install -e .` |
+| `npx ocean` / `npm start` | Run CLI without global install (use when Cursor asks to open Ocean) |
+| `ocean` | Same CLI once `npm install -g .` or `./node_modules/.bin` on PATH |
+| `ocean onboard` | **First-run setup** — `venv`, `pip install -e .`, `pytest`, then `doctor` |
+| `ocean init --setup` | Same dev setup as `onboard` (then exits; no scaffold deprecation path) |
 | `ocean clarify` | Project clarification with Moroni (Architect) |
 | `ocean crew` | Meet the OCEAN crew and see their specialties |
 | `ocean init` | Generate/refresh project scaffolds |
