@@ -1,0 +1,14 @@
+{"event": "setup", "ts": "2026-05-11T20:07:08.708503+00:00", "kind": "phase_start", "phase": "setup", "id": "welcome"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.709304+00:00", "kind": "phase_end", "phase": "setup", "id": "welcome"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.709408+00:00", "kind": "phase_start", "phase": "setup", "id": "backend_choice"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.709814+00:00", "kind": "info", "phase": "setup", "id": "codegen_backend_probes", "probe": {"codex_cli": true, "openai_api_key": false, "cursor_cli": true, "docs_dir": "/Users/reify/Classified/ocean/docs", "prefs_file": "/Users/reify/Classified/ocean/docs/ocean_prefs.json"}}
+{"event": "setup", "ts": "2026-05-11T20:07:08.709921+00:00", "kind": "question", "phase": "setup", "id": "codegen_backend", "message": "Pick coding brain (LLM / IDE path)", "choices": ["codex", "cursor_handoff", "dry_plan_only", "openai_api"]}
+{"event": "setup", "ts": "2026-05-11T20:07:08.710473+00:00", "kind": "answer", "phase": "setup", "id": "codegen_backend", "codegen_backend": "codex"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.710594+00:00", "kind": "phase_end", "phase": "setup", "id": "backend_choice"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.710691+00:00", "kind": "phase_start", "phase": "setup", "id": "credentials", "codegen_backend": "codex"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.710784+00:00", "kind": "info", "phase": "setup", "id": "credentials", "codex_auth_attempted": false}
+{"event": "setup", "ts": "2026-05-11T20:07:08.710868+00:00", "kind": "phase_end", "phase": "setup", "id": "credentials"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.711114+00:00", "kind": "phase_start", "phase": "setup", "id": "crew_intro"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.712799+00:00", "kind": "phase_end", "phase": "setup", "id": "crew_intro"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.712895+00:00", "kind": "phase_start", "phase": "setup", "id": "project_clarify"}
+{"event": "setup", "ts": "2026-05-11T20:07:08.716848+00:00", "kind": "phase_end", "phase": "setup", "id": "project_clarify"}

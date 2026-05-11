@@ -1,0 +1,12 @@
+{
+  "name": "ocean_reify",
+  "kind": "web",
+  "description": "## Summary",
+  "goals": [
+    "static UI"
+  ],
+  "constraints": [
+    "minimal dependencies"
+  ],
+  "createdAt": "2026-05-11T12:57:29.716056"
+}

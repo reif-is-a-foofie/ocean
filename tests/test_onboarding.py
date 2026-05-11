@@ -78,6 +78,7 @@ def test_chat_emits_setup_jsonl(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("OCEAN_DISABLE_CODEX", "1")
     monkeypatch.setenv("OCEAN_SIMPLE_FEED", "1")
     monkeypatch.setenv("OCEAN_SKIP_BACKEND_PROMPT", "1")
+    monkeypatch.setenv("OCEAN_SKIP_REPO_PROMPT", "1")
     monkeypatch.delenv("OCEAN_EVENTS_FILE", raising=False)
 
     r = runner.invoke(app, ["chat"])

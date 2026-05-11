@@ -6,6 +6,23 @@ OCEAN (OCEAN can engineer Asinine Nonrequirements) is a **CLI/TUI multi-agent or
 
 ### `ocean`: command not found?
 
+That happens when you run **`ocean` from a shell that has never been wired to your clone** (e.g. from `~` right after opening Terminal). The CLI is not a macOS system binary; it is installed **inside this repo** (or via a global npm/pip install).
+
+**Fastest fixes (pick one):**
+
+1. **From the repo root** (after `npm install` or `pip install -e .`):
+   ```bash
+   cd /path/to/ocean
+   npx ocean --help        # or: npm start
+   ```
+2. **Without `npx`:** `./venv/bin/ocean --help` or `./scripts/ocean --help` (wrapper that finds the venv).
+3. **From anywhere:** add the venv shim to your `PATH` in `~/.zshrc` (adjust the path to your clone):
+   ```bash
+   export PATH="/path/to/ocean/venv/bin:$PATH"
+   ```
+   or use the launcher: `alias ocean='/path/to/ocean/scripts/ocean'`
+4. **Global npm CLI:** from the repo root, `npm install -g .` — then `ocean` is on your PATH like other global npm bins.
+
 Use **npm** from the repo root (that installs the CLI + Python editable):
 
 ```bash
@@ -75,17 +92,27 @@ Ocean still has a terminal-first CLI, but it also ships a React control room for
 
 The **product shell** is a **fork of [Toad](https://github.com/batrachianai/toad)** — the rich terminal UI for coding agents. **This repo stays Ocean**: the orchestrator you **`ocean`** into from that fork (typically subprocess). Clarification, crew, backlog/plan, delegation to Codex/MCP, and session logs stay here; Toad owns picking agents, markdown UX, pickers, and shell ergonomics. Toad is **AGPL**; comply when distributing a combined stack.
 
-### First-run onboarding (Toad fork)
+### First-run onboarding
 
-`ocean chat` (default) orders: **welcome → codegen backend → credentials → crew intro → Moroni clarify (project) → plan**. Structured lines are appended to **`logs/events-*.jsonl`** when **`OCEAN_EVENTS_FILE`** is set (done automatically each session).
+When you eventually run **`ocean chat`** (feed style), it orders: **welcome → codegen backend → credentials → crew intro → Moroni clarify (project) → plan**. Structured lines are appended to **`logs/events-*.jsonl`** when **`OCEAN_EVENTS_FILE`** is set (done automatically each session).
 
 - **TTY / secrets:** **`OCEAN_SKIP_OPENAI_KEY_PROMPT=1`** skips the interactive `OPENAI_API_KEY` capture for `openai_api`. **`OCEAN_SKIP_BACKEND_PROMPT=1`** keeps the default Codex backend without prompting when stdin is non-interactive — or set **`OCEAN_CODEGEN_BACKEND`** / call MCP **`ocean_set_codegen_backend`** from the host shell (Toad).
 
 Contract for TUI hosts is documented in [**docs/toad_first_run.md**](docs/toad_first_run.md).
 
-### Where is the Toad TUI?
+### Default terminal (bare `ocean`)
 
-There is **no** bundled Toad UI in this repo. The richer terminal shell lives in the **[Toad](https://github.com/batrachianai/toad) fork** you run alongside Ocean. Here you get the **feed-style** `ocean chat`. **`ocean codex-chat`** is a legacy **Prompt Toolkit** chat helper — it is **not** Toad.
+In a **TTY**, bare **`ocean`** **`exec`s Toad** when `toad` is available. If it isn’t, Ocean **tries to install** it (in order): **`pip install batrachian-toad`** into the current Python environment, then **`uv tool install`** if `uv` is on your PATH, then the **upstream** **`curl -fsSL https://batrachian.ai/install | sh`** (macOS / Linux). Set **`OCEAN_AUTO_INSTALL_TOAD=0`** to skip that and fall straight to **`ocean chat`**.
+
+Use **`OCEAN_DEFAULT_UI=chat`**, **`OCEAN_SKIP_TOAD=1`**, or a **non-TTY** for scripts and CI (feed only).
+
+**`ocean tui`:** same as launching Toad explicitly (still requires a TTY).
+
+### Where is the Toad UI?
+
+**Toad** is the default terminal experience for bare **`ocean`** when it’s installed — see [upstream](https://github.com/batrachianai/toad) or **`batrachian-toad`** on PyPI (Python 3.14+).
+
+**`ocean codex-chat`** remains a **Prompt Toolkit** helper — not Toad.
 
 ### Codegen backend preference
 
@@ -105,7 +132,7 @@ Lines prefixed **Ocean Doctor (preflight)** at startup are **environment checks*
 |---------|-------------|
 | `npm install` | **Primary install** — Node deps + `bin/ocean`; postinstall runs `pip install -e .` |
 | `npx ocean` / `npm start` | Run CLI without global install (use when Cursor asks to open Ocean) |
-| `ocean` | Same CLI once `npm install -g .` or `./node_modules/.bin` on PATH |
+| `ocean` | **TTY:** install Toad if needed, then **`exec` Toad** · **non-TTY / skip:** **`chat`** |
 | `ocean onboard` | **First-run setup** — `venv`, `pip install -e .`, `pytest`, then `doctor` |
 | `ocean init --setup` | Same dev setup as `onboard` (then exits; no scaffold deprecation path) |
 | `ocean clarify` | Project clarification with Moroni (Architect) |

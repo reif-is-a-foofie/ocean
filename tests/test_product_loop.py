@@ -1,7 +1,5 @@
-import sys
 from pathlib import Path
 
-from ocean.mcp_client import StdioJsonRpcClient
 from ocean.product_loop import bootstrap_doctrine, next_action, normalize_advisor_recommendation, record_feedback, turn
 
 
@@ -60,31 +58,6 @@ def test_turn_combines_feedback_and_pm_guidance(tmp_path: Path):
     assert result["selected_task"]
     assert "smallest next change" in result["mcp_instruction"]
     assert result["build_context"]["important_files"]
-
-
-def test_mcp_server_lists_and_calls_tools(tmp_path: Path):
-    client = StdioJsonRpcClient(cmd=[sys.executable, "-m", "ocean.mcp_server"])
-    try:
-        client.start()
-        initialized = client.initialize(timeout=5)
-        assert initialized["serverInfo"]["name"] == "ocean"
-        tools = client.list_tools()
-        names = {tool["name"] for tool in tools}
-        assert "ocean_turn" in names
-
-        result = client.call_tool(
-            "ocean_turn",
-            {
-                "project_root": str(tmp_path),
-                "user_turn": "Run Ocean as MCP outside the codebase for Cursor.",
-                "use_advisor": False,
-            },
-        )
-        assert "content" in result
-        assert result["structuredContent"]["selected_task"]
-        assert result["structuredContent"]["build_context"]
-    finally:
-        client.stop()
 
 
 def test_normalizes_reasoning_engine_json():

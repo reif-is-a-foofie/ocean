@@ -7,15 +7,9 @@ import sys
 import time
 import random
 
-EMOJI = {
-    "Ocean": "🌊",
-    "Moroni": "🕹️",
-    "Q": "🔫",
-    "Edna": "🍩",
-    "Mario": "🍄",
-    "Tony": "🧪",
-    "You": "You",
-}
+from .personas import AGENT_EMOJI
+
+EMOJI = AGENT_EMOJI
 
 
 def _ts() -> str:

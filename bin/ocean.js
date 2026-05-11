@@ -41,7 +41,8 @@ const result = spawnSync(python, ["-m", "ocean", ...args], {
 
 if (result.error) {
   console.error("ocean: could not run Python:", result.error.message);
-  console.error("Install Python 3.11+, then: npm install (runs pip install -e .)");
+  console.error("From the Ocean repo root: npm install   (creates venv + pip install -e .)");
+  console.error("Or set PYTHON to a 3.11+ interpreter, then retry.");
   process.exit(127);
 }
 

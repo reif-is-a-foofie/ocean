@@ -20,6 +20,8 @@ from prompt_toolkit.widgets import TextArea
 import re
 import subprocess
 
+from .personas import AGENT_EMOJI
+
 ROOT = Path.cwd()
 LOGS = ROOT / "logs"
 
@@ -28,15 +30,7 @@ def banner() -> str:
     return "\n🌊 Ocean Chat — simple feed. Type /exit to quit.\n"
 
 
-EMOJI: Dict[str, str] = {
-    "Ocean": "🌊",
-    # Team identities
-    "Moroni": "🕹️",  # Architect / Brain
-    "Q": "🔫",        # Backend Engineer (squirt gun)
-    "Edna": "🍩",     # UI/UX Engineer
-    "Mario": "🍄",    # DevOps
-    "Tony": "🚀",     # Experimenter / Test Pilot
-}
+EMOJI: Dict[str, str] = dict(AGENT_EMOJI)
 
 
 def _now() -> str:

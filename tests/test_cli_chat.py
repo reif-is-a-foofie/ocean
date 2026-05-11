@@ -44,6 +44,7 @@ def test_chat_non_interactive(monkeypatch, tmp_path):
     # Disable codex during unit test to avoid external dependency
     monkeypatch.setenv("OCEAN_DISABLE_CODEX", "1")
     monkeypatch.setenv("OCEAN_SIMPLE_FEED", "1")
+    monkeypatch.setenv("OCEAN_SKIP_REPO_PROMPT", "1")
     r = runner.invoke(app, ["chat"])  # do not call entrypoint directly in tests
     assert r.exit_code == 0
     assert "Crew assembled" in r.output

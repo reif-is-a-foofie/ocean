@@ -8,9 +8,10 @@ Implement OCEAN — a CLI multi‑agent **orchestrator** between the user and co
 
 ## Global Guardrails
 
+- **Production regression:** From repo root run **`bash scripts/regression.sh`** (full **`pytest tests/`**, **`scripts/mcp_stdio_smoke.py`**, **`ocean --help`** / **`ocean --version`**). Prefer **`./venv/bin/python`** when a venv exists (the script picks it up). Do not treat **`pytest tests/`** alone as the full production bar unless the user explicitly narrows scope.
 - **Install / run via npm:** From repo root `npm install` wires the **`ocean`** CLI (`package.json` → `bin/ocean.js`) and runs **`pip install -e .`** in postinstall (skip with `OCEAN_SKIP_PY_INSTALL=1`). To open the orchestrator when the user asks for Ocean: **`npx ocean`** or **`npm start`** from the repo root (after `npm install` if needed).
-- Single entrypoint: `ocean` (no args) runs the conversation (clarify → crew intros) and writes to a single session log.
-- Cross‑platform: macOS, Linux; Python 3.11+.
+- Single entrypoint: `ocean` (no args) on a **TTY** tries **`exec` Toad**, **auto-installing** it when missing (`pip` → `uv` → upstream curl installer; disable with **`OCEAN_AUTO_INSTALL_TOAD=0`**); otherwise **`ocean chat`**. Use **`OCEAN_DEFAULT_UI=chat`** / **`OCEAN_SKIP_TOAD=1`** / non-TTY for feed-only.
+- Cross‑platform: macOS, Linux; Python 3.11+ (**PyPI Toad** [`batrachian-toad`](https://pypi.org/project/batrachian-toad/) installs with Ocean on **Python 3.14+**; use [upstream installer](https://github.com/batrachianai/toad) on older interpreters).
 - Keep changes minimal and focused per milestone; no unrelated refactors.
 - Never remove logs or user content; only append.
 - Confirm before network/deploy actions; print dry‑run steps when credentials missing.
@@ -46,11 +47,11 @@ For each milestone below:
   - `AgentBase`: `name, role, tools[]`; methods `introduce()`, `plan(ProjectSpec)->list[str]`, `propose_tasks(ProjectSpec)->list[Task]`, `execute(tasks)->list[Task]`.
   - `Moroni`: architect; `plan()` returns coordination bullets.
   - `Q`: backend; proposes FastAPI `/healthz` + pytest task.
-  - `Edna`: designer; includes design methodology and optional V0 CLI support.
+  - `Edna`: designer; **`tools[]` = operational affordances** (what she may invoke: codegen, design tokens, V0, visual QA). **`docs/personas.yaml`** = **voice, traits, skills, background, context_hooks** (how she speaks and what expertise to apply). Edna’s skills include **UI implementation**, **screenshots / visual regression** (host-provided capture tools when available), and **design principles** from `ocean/tools/design_system.py` (`DESIGN_METHOD`, `DESIGN_PRINCIPLES`).
   - `Mario`: devops; proposes CI, Docker, and Render deploy plan tasks.
 
 - `ocean/tools/`
-  - `design_system.py`: `DESIGN_METHOD`, `DESIGN_TOKENS`.
+  - `design_system.py`: `DESIGN_METHOD`, `DESIGN_PRINCIPLES`, `DESIGN_TOKENS`.
   - `v0_cli.py`: `V0Cli.is_available()`; Cursor may expand with real calls.
   - `deploy.py`: `RenderDeployPlan.steps()` for dry-run plans.
 

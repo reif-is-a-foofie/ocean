@@ -6,6 +6,7 @@ from typing import Iterable, Optional
 import os
 
 from .agents import default_agents
+from .backends import get_codegen_backend, write_cursor_handoffs
 from .models import ProjectSpec, Task
 from .feed import agent_say
 
@@ -33,10 +34,28 @@ def execute_backlog(backlog: Iterable[Task], docs_dir: Path, spec: ProjectSpec) 
     1) Moroni (architecture)
     2) Q and Edna (implementation/UI) in parallel
     3) Mario (DevOps) last; may start local runtime
+
+    Non-Codex modes (see docs/ocean_prefs.json / OCEAN_CODEGEN_BACKEND):
+    - dry_plan_only: write backlog + plan only.
+    - cursor_handoff: write docs/handoffs/*.md for Cursor; skip CLI/API codegen.
     """
     from concurrent.futures import ThreadPoolExecutor, wait
 
     docs_dir.mkdir(parents=True, exist_ok=True)
+
+    mode = get_codegen_backend()
+    backlog_list = list(backlog)
+    if mode == "dry_plan_only":
+        agent_say("Ocean", "Codegen backend is dry_plan_only — writing backlog/plan only.")
+        bj, pm = write_backlog(backlog_list, docs_dir)
+        return bj, pm, None
+    if mode == "cursor_handoff":
+        agent_say("Ocean", "Codegen backend is cursor_handoff — skipping Codex/OpenAI execution.")
+        from . import feed as _feed_mod
+
+        write_cursor_handoffs(backlog_list, spec, docs_dir, feed_fn=_feed_mod.feed)
+        bj, pm = write_backlog(backlog_list, docs_dir)
+        return bj, pm, None
 
     agents = {agent.name: agent for agent in default_agents()}
     executed_tasks: list[Task] = []

@@ -122,18 +122,18 @@ def prompt_codegen_backend_if_needed(cwd: Path | None = None) -> str:
 
     snap = probe_snapshot(root)
     lines = [
-        "Where should Ocean send codegen?",
-        f"  [1] codex — OpenAI Codex CLI ({'installed' if snap['codex_cli'] else 'not found'})",
-        f"  [2] openai_api — OpenAI HTTP API only ({'OPENAI_API_KEY set' if snap['openai_api_key'] else 'no key'})",
-        f"  [3] cursor_handoff — write markdown handoffs for Cursor (IDE); no headless Cursor exec",
-        "  [4] dry_plan_only — backlog + plan files only; no codegen",
+        "Pick your **coding brain** (Ocean orchestrates files + crew; this backend does codegen):",
+        f"  [1] codex — OpenAI **Codex CLI** on your machine ({'found' if snap['codex_cli'] else 'not on PATH'})",
+        f"  [2] openai_api — **OpenAI API** / Chat models via HTTP ({'OPENAI_API_KEY set' if snap['openai_api_key'] else 'no key'})",
+        "  [3] cursor_handoff — **Cursor IDE** handoffs (markdown in docs/handoffs/); you run prompts in Cursor",
+        "  [4] dry_plan_only — **No LLM** from Ocean — backlog + plan files only",
     ]
     try:
         from rich.prompt import Prompt
 
         print("\n".join(lines))
         choice = Prompt.ask(
-            "Choose backend",
+            "Choose brain (1–4)",
             choices=["1", "2", "3", "4"],
             default="1",
         )

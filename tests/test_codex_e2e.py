@@ -31,5 +31,5 @@ def test_codex_e2e_exec_trivial():
 
     # Warm up quickly to set OCEAN_CODEX_AUTH when subscription is ready
     _warmup_codex(timeout=10)
-    ok, detail = _codex_e2e_test(timeout=12)
+    ok, detail, _cat = _codex_e2e_test(timeout=12)
     assert ok, f"codex e2e failed: {detail}"

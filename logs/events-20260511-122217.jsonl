@@ -1,0 +1,10 @@
+{"event": "setup", "ts": "2026-05-11T17:22:17.716653+00:00", "kind": "phase_start", "phase": "setup", "id": "welcome"}
+{"event": "setup", "ts": "2026-05-11T17:22:20.839463+00:00", "kind": "phase_end", "phase": "setup", "id": "welcome"}
+{"event": "setup", "ts": "2026-05-11T17:22:20.839724+00:00", "kind": "phase_start", "phase": "setup", "id": "backend_choice"}
+{"event": "setup", "ts": "2026-05-11T17:22:20.840670+00:00", "kind": "info", "phase": "setup", "id": "codegen_backend_probes", "probe": {"codex_cli": true, "openai_api_key": false, "cursor_cli": false, "docs_dir": "/Users/reify/Classified/ocean/docs", "prefs_file": "/Users/reify/Classified/ocean/docs/ocean_prefs.json"}}
+{"event": "setup", "ts": "2026-05-11T17:22:20.840856+00:00", "kind": "question", "phase": "setup", "id": "codegen_backend", "message": "Where should Ocean send codegen?", "choices": ["codex", "cursor_handoff", "dry_plan_only", "openai_api"]}
+{"event": "setup", "ts": "2026-05-11T17:22:20.841321+00:00", "kind": "answer", "phase": "setup", "id": "codegen_backend", "codegen_backend": "codex"}
+{"event": "setup", "ts": "2026-05-11T17:22:20.841450+00:00", "kind": "phase_end", "phase": "setup", "id": "backend_choice"}
+{"event": "setup", "ts": "2026-05-11T17:22:20.841612+00:00", "kind": "phase_start", "phase": "setup", "id": "credentials", "codegen_backend": "codex"}
+{"event": "setup", "ts": "2026-05-11T17:22:23.363238+00:00", "kind": "info", "phase": "setup", "id": "credentials", "codex_auth_attempted": true}
+{"event": "setup", "ts": "2026-05-11T17:22:23.363511+00:00", "kind": "phase_end", "phase": "setup", "id": "credentials"}

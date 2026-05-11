@@ -1,4 +1,4 @@
 ocean
-ocean-tui
 ocean_brython-snake
 ocean_reif
+ocean_reify

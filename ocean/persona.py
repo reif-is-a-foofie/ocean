@@ -49,6 +49,9 @@ def voice_brief(agent: str, context: Optional[str] = None, max_chars: int = 400)
     p = load_personas().get(agent, {})
     style_level = (os.getenv("OCEAN_STYLE") or "max").strip().lower()
     traits = ", ".join(p.get("traits", [])[:3])
+    skills = p.get("skills", [])
+    skills_s = ", ".join(str(s) for s in skills[:8]) if isinstance(skills, list) else ""
+    background = (p.get("background") or "").strip() if isinstance(p.get("background"), str) else ""
     diction_list = p.get("diction", [])
     # prefer patterns/phrases, but avoid quoting; turn into guidance
     diction = ", ".join([d.replace("\"", "").strip() for d in diction_list[:2]]) if diction_list else ""
@@ -61,6 +64,12 @@ def voice_brief(agent: str, context: Optional[str] = None, max_chars: int = 400)
     parts = []
     if traits:
         parts.append(f"Voice traits: {traits}.")
+    if skills_s and style_level == "max":
+        parts.append(f"Apply expertise: {skills_s}.")
+    if background and style_level == "max":
+        if len(background) > 280:
+            background = background[:279] + "…"
+        parts.append(f"Background: {background}")
     if diction and style_level == "max":
         parts.append(f"Diction guide (prefer, without quoting): {diction}.")
     if style and style_level == "max":

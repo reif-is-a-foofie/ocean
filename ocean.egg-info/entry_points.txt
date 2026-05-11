@@ -1,2 +1,3 @@
 [console_scripts]
 ocean = ocean.cli:entrypoint
+ocean-mcp = ocean.mcp_server:main

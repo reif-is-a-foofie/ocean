@@ -80,6 +80,8 @@ logs/*.log
 *.backup
 
 # Project specific
+bin/ocean-tui
+ocean_*/.config/
 ocean.egg-info/
 .pytest_cache/
 .ocean/

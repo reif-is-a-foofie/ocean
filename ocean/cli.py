@@ -37,6 +37,8 @@ from .backends import (
 )
 from .dotenv_merge import merge_dotenv_assignments
 from .events_emit import emit_setup
+from .runtime import format_status_text, ingest_message, run_cycle
+from . import token_budget
 
 
 def _is_test_env() -> bool:
@@ -965,6 +967,63 @@ def _parse_prd(prd_text: str) -> dict:
     }
 
 
+def _prompt_project_directory_if_needed(log: Path) -> None:
+    """Interactive: confirm cwd or chdir to a pasted absolute path (piggybacks on chosen LLM cwd)."""
+    if _is_test_env():
+        return
+    if os.getenv("OCEAN_SKIP_REPO_PROMPT", "").lower() in ("1", "true", "yes"):
+        return
+    try:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            return
+    except Exception:
+        return
+
+    emit_setup("phase_start", id="project_root")
+    cwd = Path.cwd()
+    feed(
+        "🌊 Ocean: **Project directory** — crew + docs + logs live here. "
+        "**Codex / OpenAI / Cursor** (your pick in the next step) does the coding; Ocean routes work there."
+    )
+    feed(f"🌊 Ocean: Current directory: {cwd}")
+    emit_setup(
+        "question",
+        id="project_root",
+        message="Confirm or change project root",
+        choices=["1", "2"],
+    )
+    choice = _ask(
+        "[1] Use current directory  |  [2] Paste absolute path to another project",
+        default="1",
+        choices=["1", "2"],
+    )
+    emit_setup("answer", id="project_root", choice=choice)
+    if choice == "1":
+        feed("🌊 Ocean: Using current directory.")
+        emit_setup("phase_end", id="project_root")
+        return
+
+    raw = _ask("Absolute path to project root (no quotes)", default="").strip()
+    if not raw:
+        feed("🌊 Ocean: Empty path — staying in current directory.")
+        emit_setup("phase_end", id="project_root")
+        return
+    dest = Path(raw).expanduser().resolve()
+    if not dest.is_dir():
+        feed(f"🌊 Ocean: Not a directory: {dest} — staying in {cwd}")
+        emit_setup("phase_end", id="project_root")
+        return
+    try:
+        os.chdir(dest)
+        _switch_root(dest)
+        ensure_repo_structure()
+        feed(f"🌊 Ocean: Project root → {dest}")
+        write_log(log, "[OCEAN] Switched project root", str(dest))
+    except Exception as e:
+        feed(f"🌊 Ocean: Could not switch root: {e}")
+    emit_setup("phase_end", id="project_root")
+
+
 def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> str:
     """Robust prompt helper.
 
@@ -1091,6 +1150,8 @@ def chat(
     except Exception:
         pass
 
+    _prompt_project_directory_if_needed(log)
+
     try:
         from . import setup_flow as _setup_flow
 
@@ -1118,8 +1179,7 @@ def chat(
         feed("🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship.")
         feed(f"🌊 Ocean: Workspace: {Path.cwd()}")
         feed(
-            "🌊 Ocean: First we wire up codegen and credentials, meet your crew, "
-            "then Moroni captures your project."
+            "🌊 Ocean: **You drive goals.** I run the crew, timing, and token budget—you never orchestrate specialists yourself."
         )
     else:
         console.print(banner())
@@ -1134,7 +1194,7 @@ def chat(
     emit_setup(
         "question",
         id="codegen_backend",
-        message="Where should Ocean send codegen?",
+        message="Pick coding brain (LLM / IDE path)",
         choices=sorted(VALID_BACKENDS),
     )
     try:
@@ -1144,6 +1204,8 @@ def chat(
     except Exception:
         _bk_choice = get_codegen_backend()
     emit_setup("phase_end", id="backend_choice")
+
+    token_budget.feed_status_if_needed(feed)
 
     _run_setup_credentials(get_codegen_backend())
 
@@ -1446,12 +1508,41 @@ def _do_clarify(log: Path) -> None:
     goals = ", ".join(inferred.get("goals") or []) or _ask("🎯 🌊 OCEAN: Goals — What are the primary goals?", default="prototype, learn, ship")
     constraints = ", ".join(inferred.get("constraints") or []) or _ask("⚠️ 🌊 OCEAN: Constraints — Any constraints I should know about?", default="")
 
+    name_s = name.strip()
+    desc_s = description.strip()
+    goals_list = [g.strip() for g in goals.split(",") if g.strip()]
+    vision_default = (
+        os.getenv("OCEAN_DEFAULT_VISION", "").strip()
+        or desc_s
+        or (goals_list[0] if goals_list else "")
+        or "Ship a focused, high-quality version of this product."
+    )
+    ai_id_default = os.getenv("OCEAN_DEFAULT_AI_IDENTITY", "").strip() or (
+        f"Your coding partner on **{name_s or 'this project'}** — "
+        "Ocean runs the crew and timing; you steer goals and say when we're done."
+    )
+    _no_extra_questions = _is_test_env() or os.getenv("OCEAN_ALLOW_QUESTIONS", "1") in ("0", "false", "False")
+    if _no_extra_questions:
+        vision = vision_default
+        ai_identity = ai_id_default
+    else:
+        vision = _ask(
+            "🔭 🌊 OCEAN: Vision — In one sentence, what does “done” look like?",
+            default=vision_default,
+        ).strip()
+        ai_identity = _ask(
+            "🤖 🌊 OCEAN: Who is the AI to you? (tone / role — Ocean still routes specialists)",
+            default=ai_id_default,
+        ).strip()
+
     spec = {
-        "name": name.strip(),
+        "name": name_s,
         "kind": kind.strip().lower(),
-        "description": description.strip(),
-        "goals": [g.strip() for g in goals.split(",") if g.strip()],
+        "description": desc_s,
+        "goals": goals_list,
         "constraints": [c.strip() for c in constraints.split(",") if c.strip()],
+        "vision": vision,
+        "ai_identity": ai_identity,
         "createdAt": datetime.now().isoformat(),
     }
     
@@ -1491,6 +1582,10 @@ def _do_clarify(log: Path) -> None:
             feed(f"🌊 Ocean: Summary — Goals: {', '.join(spec['goals'])}")
         if spec.get("constraints"):
             feed(f"🌊 Ocean: Summary — Constraints: {', '.join(spec['constraints'])}")
+        if spec.get("vision"):
+            feed(f"🌊 Ocean: Summary — Vision: {spec['vision']}")
+        if spec.get("ai_identity"):
+            feed(f"🌊 Ocean: Summary — AI identity: {spec['ai_identity']}")
     else:
         table = Table(title="📋 Project Summary (from Moroni's analysis)")
         table.add_column("Field", style="cyan")
@@ -1501,6 +1596,10 @@ def _do_clarify(log: Path) -> None:
         table.add_row("Goals", ", ".join(spec["goals"]))
         if spec["constraints"]:
             table.add_row("Constraints", ", ".join(spec["constraints"]))
+        if spec.get("vision"):
+            table.add_row("Vision", spec["vision"])
+        if spec.get("ai_identity"):
+            table.add_row("AI identity", spec["ai_identity"])
         console.print(table)
     feed(f"🌊 Ocean: Moroni saved your project spec to {out}")
 
@@ -1550,7 +1649,7 @@ def _do_crew(log: Path) -> None:
     else:
         for a, r, s in crew_lines:
             feed(f"🌊 Ocean: Crew — {a}: {r} — {s}")
-    feed("🌊 Ocean: Crew assembled ✅")
+    feed("🌊 Ocean: Crew assembled ✅ — I’ll route work to them; you don’t manage the roster.")
 
 
 def _do_plan(log: Path) -> None:
@@ -2131,14 +2230,13 @@ def chat_repl():
 
 
 
-@app.command(help="TUI disabled — use Ocean chat instead")
+@app.command(help="Toad terminal UI (install: https://batrachian.ai/install)")
 def tui():
-    """Deprecated: TUI has been removed to keep things simple.
+    """Replace this process with **Toad**. There is no alternate in-repo terminal UI."""
+    ensure_repo_structure()
+    from . import launcher
 
-    Use `ocean` to launch the Ocean-branded chat and see team chatter inline.
-    """
-    console.print("[yellow]TUI is disabled.[/yellow] Use 'ocean' to chat and orchestrate.")
-    raise typer.Exit(code=0)
+    launcher.launch_toad_or_die()
 
 
 @app.command(name="codex-chat", help="Start a Codex-style chat wrapped with Ocean branding (Codex required)")
@@ -2294,6 +2392,55 @@ def loop(
     except KeyboardInterrupt:
         pass
     raise typer.Exit(code=0)
+
+
+@app.command(help="Add a note to the autonomous inbox (human-in-the-loop)")
+def ingest(
+    message: str = typer.Argument(..., help="Product idea, feedback, or test note"),
+    attach: list[Path] = typer.Option(
+        [],
+        "--attach",
+        "-a",
+        help="Attach file path (repeatable; stored as absolute paths in the inbox)",
+    ),
+):
+    ensure_repo_structure()
+    paths = [p for p in attach if p]
+    p = ingest_message(message, paths, cwd=ROOT)
+    feed(f"🌊 Ocean: inbox ← {p.name}")
+
+
+@app.command(help="Show autonomous runtime state (.ocean/) and inbox depth")
+def status():
+    ensure_repo_structure()
+    rprint(format_status_text(cwd=ROOT))
+
+
+@app.command(name="cycle", help="Run one autonomous cycle (inbox → plan → execute)")
+def cycle_once(
+    max_tokens: Optional[int] = typer.Option(
+        None,
+        "--max-tokens",
+        help="Soft cap: skip execution if estimated tokens exceed this (OCEAN_TOKEN_ESTIMATE_PER_TASK per task)",
+    ),
+):
+    ensure_repo_structure()
+    _load_env_file(ROOT / ".env")
+    apply_backend_env_from_prefs(ROOT)
+    if not os.getenv("OCEAN_EVENTS_FILE"):
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        events_file = LOGS / f"events-{timestamp}.jsonl"
+        os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
+        try:
+            events_file.touch(exist_ok=True)
+        except Exception:
+            pass
+    res = run_cycle(root=ROOT, docs_dir=DOCS, max_tokens=max_tokens)
+    if not res.ok:
+        feed(f"🌊 Ocean: cycle failed — {res.message}")
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=0)
+
 
 def _emit_event(kind: str, **data) -> None:
     path = os.getenv("OCEAN_EVENTS_FILE")
@@ -2462,11 +2609,12 @@ def scout():
 
 
 def entrypoint():
-    # If no args were provided, default to invoking the `chat` command via Typer
-    # so that options get parsed/injected correctly (avoids OptionInfo default).
+    # Bare ``ocean`` on TTY: ``exec`` Toad when available; else ``ocean chat``.
     if len(sys.argv) == 1:
-        # Default to Ocean chat (combined feed)
-        sys.argv.append("chat")
+        from . import launcher
+
+        launcher.handoff_default_shell()
+        sys.argv.extend(launcher.resolve_bare_ocean_argv())
     app()
 
 
@@ -2723,11 +2871,6 @@ def cleanup_scan():
     for p in [ROOT / "ocean" / "brave_search.py"]:
         if p.exists():
             candidates.append(("file", p))
-    # Old TUI proto (if not actively used)
-    if not os.getenv("OCEAN_KEEP_TUI"):
-        p = ROOT / "ocean-tui"
-        if p.exists():
-            candidates.append(("dir", p))
     # CrewAI adapter (if disabled)
     if os.getenv("OCEAN_USE_CREWAI") in (None, "0", "false", "False"):
         p = ROOT / "ocean" / "crewai_adapter.py"
@@ -2770,10 +2913,6 @@ def cleanup_apply():
             targets.append(p)
     if os.getenv("OCEAN_USE_CREWAI") in (None, "0", "false", "False"):
         p = ROOT / "ocean" / "crewai_adapter.py"
-        if p.exists():
-            targets.append(p)
-    if not os.getenv("OCEAN_KEEP_TUI"):
-        p = ROOT / "ocean-tui"
         if p.exists():
             targets.append(p)
     if not targets:

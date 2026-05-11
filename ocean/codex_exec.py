@@ -307,8 +307,11 @@ def generate_files(
         env["OCEAN_AGENT"] = agent
         # Provide a hint label for Codex if supported (harmless otherwise)
         env.setdefault("CODEX_RUN_LABEL", f"ocean:{agent}")
+    prefer_api = os.getenv("OCEAN_PREFER_OPENAI_API") in ("1", "true", "True") and bool(env.get("OPENAI_API_KEY"))
     global _last_mode
-    if _logged_in_via_codex():
+    if prefer_api:
+        _last_mode = "api_fallback"
+    elif _logged_in_via_codex():
         # Ensure API key does not override subscription auth
         env.pop("OPENAI_API_KEY", None)
         # Ensure subscription token is exported to child processes if available
