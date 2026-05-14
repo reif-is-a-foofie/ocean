@@ -132,9 +132,39 @@ def generate_files(
         _feed(f"🌊 Ocean: Claude CLI exited {result.returncode} — {err}")
         return None
 
+    _record_tokens(result.stdout)
+
     files = _extract_json(result.stdout)
     if not files:
         _feed("🌊 Ocean: Claude returned no parseable file map.")
         return None
 
     return files
+
+
+# Blended Sonnet input+output rate: ~$9 / 1M tokens
+_COST_PER_TOKEN = 9.0 / 1_000_000
+
+
+def _record_tokens(raw_output: str) -> None:
+    """Parse cost_usd from claude JSON response and record token estimate."""
+    try:
+        data = json.loads(raw_output.strip())
+        cost = float(data.get("cost_usd") or data.get("total_cost_usd") or 0.0)
+        if cost > 0:
+            tokens = max(1, int(cost / _COST_PER_TOKEN))
+            from pathlib import Path
+            from . import token_budget
+            token_budget.note_usage(tokens, cwd=Path.cwd())
+            _feed(f"🌊 Ocean: ~{tokens:,} tokens (${cost:.4f})")
+            return
+    except Exception:
+        pass
+    # Fallback: estimate from output length
+    try:
+        from pathlib import Path
+        from . import token_budget
+        tokens = max(1, len(raw_output) // 4)
+        token_budget.note_usage(tokens, cwd=Path.cwd())
+    except Exception:
+        pass

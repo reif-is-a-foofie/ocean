@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 from ..feed import feed as _feed
-from ..token_budget import usage_recent, note_usage
+from ..token_budget import usage_recent
 from .economy import CoinMint, SESSION_BUDGET
 from .scheduler import PersonaScheduler, load_project_state
 
@@ -64,17 +64,19 @@ def _wait_seconds_until_free(cwd: Path, limit: int) -> float:
         return 0.0
 
 
-def _dispatch(description: str, cwd: Path) -> int:
-    """Call the agent, write output to workspace/, return estimated tokens used."""
+def _dispatch(description: str, cwd: Path) -> None:
+    """Call the agent and write output to workspace/.
+    Token usage is recorded inside the executor (claude_exec / codex_exec).
+    """
     from .. import codex_exec as _cx
     result = _cx.generate_files_with_fallback(
         description, context_file=cwd / "docs" / "project.json"
     )
     if not result:
-        return len(description) // 4
+        return
     if "__cursor_handoff__" in result:
         _feed("🌊 Ocean: cursor handoff written — open in Cursor Composer")
-        return len(description) // 4
+        return
     workspace = cwd / "workspace"
     workspace.mkdir(exist_ok=True)
     for path, content in result.items():
@@ -82,7 +84,6 @@ def _dispatch(description: str, cwd: Path) -> int:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(content, encoding="utf-8")
         _feed(f"🌊 Ocean: ✅ workspace/{path}")
-    return max(len(description) // 4, len(str(result)) // 4)
 
 
 def run(cwd: Path | None = None) -> None:
@@ -143,8 +144,7 @@ def run(cwd: Path | None = None) -> None:
         for nom in result.selected:
             _feed(f"🌊 Ocean: [{nom.persona} bid={nom.bid:.1f}] {nom.task_title}")
             _feed(f"🌊 Ocean: {nom.persona} says: {nom.rationale}")
-            tokens = _dispatch(nom.task_description, cwd)
-            note_usage(tokens, cwd)
+            _dispatch(nom.task_description, cwd)
 
         if not result.selected:
             _feed("🌊 Ocean: nothing fit the budget this session — all coins saved")
