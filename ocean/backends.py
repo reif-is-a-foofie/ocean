@@ -12,7 +12,10 @@ from typing import Any
 
 PREFS_RELATIVE = Path("docs") / "ocean_prefs.json"
 
-VALID_BACKENDS = frozenset({"codex", "openai_api", "cursor_handoff", "dry_plan_only"})
+VALID_BACKENDS = frozenset({"codex", "claude", "openai_api", "cursor_handoff", "dry_plan_only"})
+
+# Ordered fallback chain — first available and healthy agent wins
+AGENT_FALLBACK_ORDER = ("codex", "claude", "cursor_handoff")
 HANDOFFS_DIRNAME = "handoffs"
 
 
@@ -64,6 +67,10 @@ def probe_codex_cli_installed() -> bool:
     return shutil.which("codex") is not None
 
 
+def probe_claude_cli_installed() -> bool:
+    return shutil.which("claude") is not None
+
+
 def probe_openai_api_key() -> bool:
     return bool(os.getenv("OPENAI_API_KEY", "").strip())
 
@@ -77,6 +84,7 @@ def probe_snapshot(cwd: Path | None = None) -> dict[str, Any]:
     root = cwd or Path.cwd()
     return {
         "codex_cli": probe_codex_cli_installed(),
+        "claude_cli": probe_claude_cli_installed(),
         "openai_api_key": probe_openai_api_key(),
         "cursor_cli": probe_cursor_cli(),
         "docs_dir": str(root / "docs"),
@@ -122,26 +130,36 @@ def prompt_codegen_backend_if_needed(cwd: Path | None = None) -> str:
 
     snap = probe_snapshot(root)
     lines = [
-        "Pick your **coding brain** (Ocean orchestrates files + crew; this backend does codegen):",
-        f"  [1] codex — OpenAI **Codex CLI** on your machine ({'found' if snap['codex_cli'] else 'not on PATH'})",
-        f"  [2] openai_api — **OpenAI API** / Chat models via HTTP ({'OPENAI_API_KEY set' if snap['openai_api_key'] else 'no key'})",
-        "  [3] cursor_handoff — **Cursor IDE** handoffs (markdown in docs/handoffs/); you run prompts in Cursor",
-        "  [4] dry_plan_only — **No LLM** from Ocean — backlog + plan files only",
+        "Pick your coding agent:",
+        f"  [1] codex  — OpenAI Codex CLI ({'found' if snap['codex_cli'] else 'not on PATH'})",
+        f"  [2] claude — Anthropic Claude CLI ({'found' if snap['claude_cli'] else 'not on PATH'})",
+        "  [3] cursor — Cursor IDE handoffs (writes docs/handoffs/ for Composer)",
+        f"  [4] openai_api — OpenAI API direct ({'key set' if snap['openai_api_key'] else 'no key'})",
+        "  [5] dry_plan_only — plan only, no codegen",
     ]
+    # Auto-detect best default
+    if snap["codex_cli"]:
+        default_choice = "1"
+    elif snap["claude_cli"]:
+        default_choice = "2"
+    elif snap["cursor_cli"]:
+        default_choice = "3"
+    else:
+        default_choice = "5"
     try:
         from rich.prompt import Prompt
 
         print("\n".join(lines))
         choice = Prompt.ask(
-            "Choose brain (1–4)",
-            choices=["1", "2", "3", "4"],
-            default="1",
+            "Choose agent (1–5)",
+            choices=["1", "2", "3", "4", "5"],
+            default=default_choice,
         )
     except Exception:
         set_codegen_backend_env("codex")
         return "codex"
 
-    mapping = {"1": "codex", "2": "openai_api", "3": "cursor_handoff", "4": "dry_plan_only"}
+    mapping = {"1": "codex", "2": "claude", "3": "cursor_handoff", "4": "openai_api", "5": "dry_plan_only"}
     backend = mapping.get(choice.strip(), "codex")
     save_prefs({"codegen_backend": backend}, root)
     set_codegen_backend_env(backend)

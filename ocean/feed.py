@@ -45,13 +45,13 @@ def _write(line: str) -> None:
         if os.getenv("OCEAN_TEST") == "1":
             tw_enabled = False
         maxlen = int(os.getenv("OCEAN_TYPEWRITER_MAXLEN", "300"))
-        base_delay = float(os.getenv("OCEAN_TYPEWRITER_DELAY", "0.025"))
+        base_delay = float(os.getenv("OCEAN_TYPEWRITER_DELAY", "0.006"))
         human = os.getenv("OCEAN_TYPEWRITER_HUMAN", "1") not in ("0", "false", "False")
-        var = float(os.getenv("OCEAN_TW_VARIANCE", "0.6"))  # fraction +/- around base
-        punct_mult = float(os.getenv("OCEAN_TW_PUNCT_MULT", "4.0"))
-        comma_mult = float(os.getenv("OCEAN_TW_COMMA_MULT", "2.0"))
+        var = float(os.getenv("OCEAN_TW_VARIANCE", "0.4"))
+        punct_mult = float(os.getenv("OCEAN_TW_PUNCT_MULT", "2.0"))
+        comma_mult = float(os.getenv("OCEAN_TW_COMMA_MULT", "1.5"))
         space_mult = float(os.getenv("OCEAN_TW_SPACE_MULT", "0.3"))
-        max_delay = float(os.getenv("OCEAN_TW_MAX_DELAY", "0.12"))
+        max_delay = float(os.getenv("OCEAN_TW_MAX_DELAY", "0.03"))
     except Exception:
         tw_enabled = True
         maxlen = 300

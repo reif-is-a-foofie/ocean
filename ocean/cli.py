@@ -1232,10 +1232,6 @@ def chat(
 
     _codex_startup_needed = get_codegen_backend() == "codex"
 
-    # Startup doctor: one-line vibes check (humor included)
-    if os.getenv("OCEAN_STARTUP_DOCTOR", "1") not in ("0", "false", "False"):
-        _doctor_lite()
-    # Ocean Doctor disabled by default per user request
     if not _external_startup_disabled():
         MCP.ensure_started(log)
     # Ensure project-level venv for convenience
@@ -2130,8 +2126,12 @@ def chat_repl():
                 continue
             from . import codex_exec as _cx
             feed("🌊 Ocean: Dispatching to agent — building now…")
-            result = _cx.generate_files(prd_text, context_file=DOCS / "project.json")
-            if result:
+            result = _cx.generate_files_with_fallback(
+                prd_text, context_file=DOCS / "project.json"
+            )
+            if result and "__cursor_handoff__" in result:
+                feed("🌊 Ocean: Cursor handoff written to docs/handoffs/ — open in Cursor Composer.")
+            elif result:
                 for path, content in result.items():
                     out = ROOT / path
                     out.parent.mkdir(parents=True, exist_ok=True)
@@ -2139,7 +2139,7 @@ def chat_repl():
                     feed(f"🌊 Ocean: ✅ wrote {path}")
                 console.print(f"✅ Build complete — {len(result)} file(s) written.")
             else:
-                console.print("Build returned no files. Check codex auth: ocean doctor")
+                console.print("Build returned no files. Run: ocean doctor")
             continue
         if line in {"stage", "deploy"}:
             try:

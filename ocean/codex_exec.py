@@ -13,6 +13,45 @@ import base64
 import datetime as _dt
 
 
+def _coerce_token_count(raw: object) -> int:
+    """Best-effort token total from Codex stream events or OpenAI ``usage`` objects."""
+    try:
+        if raw is None:
+            return 0
+        if isinstance(raw, bool):
+            return 0
+        if isinstance(raw, int):
+            return max(0, raw)
+        if isinstance(raw, float):
+            return max(0, int(raw))
+        if isinstance(raw, str):
+            s = raw.strip().replace(",", "")
+            if s.isdigit():
+                return int(s)
+            return 0
+        if isinstance(raw, dict):
+            if "total_tokens" in raw:
+                return max(0, int(raw["total_tokens"]))
+            tin = int(raw.get("prompt_tokens") or raw.get("input_tokens") or 0)
+            tout = int(raw.get("completion_tokens") or raw.get("output_tokens") or 0)
+            return max(0, tin + tout)
+    except (TypeError, ValueError):
+        return 0
+    return 0
+
+
+def _note_token_ledger(raw: object) -> None:
+    n = _coerce_token_count(raw)
+    if n <= 0:
+        return
+    try:
+        from . import token_budget
+
+        token_budget.note_usage(n, cwd=Path.cwd())
+    except Exception:
+        pass
+
+
 class CodexUnavailable(Exception):
     pass
 
@@ -417,6 +456,7 @@ def generate_files(
                             bufsize=1,
                         )
                         stdout_chunks: list[str] = []
+                        stream_usage_max = 0
                         start = _time.time()
                         while True:
                             if proc.stdout is None:
@@ -447,8 +487,13 @@ def generate_files(
                                         txt = evt.get("content") or evt.get("text") or evt.get("message") or "(event)"
                                         txt = str(txt)
                                         _feed(f"🪵 Codex: {kind}: " + (txt[:160] + ("…" if len(txt) > 160 else "")))
-                                    if "tokens" in evt or "tokens_used" in evt:
-                                        val = evt.get("tokens_used") or evt.get("tokens")
+                                    if "tokens" in evt or "tokens_used" in evt or "usage" in evt:
+                                        val = evt.get("usage") if isinstance(evt.get("usage"), (dict, int)) else None
+                                        if val is None:
+                                            val = evt.get("tokens_used") or evt.get("tokens")
+                                        nu = _coerce_token_count(val)
+                                        if nu > stream_usage_max:
+                                            stream_usage_max = nu
                                         _feed(f"🪵 Codex: tokens={val}")
                                     continue
                             except Exception:
@@ -691,4 +736,53 @@ def generate_files(
                 pass
             return out
 
+    return None
+
+
+def generate_files_with_fallback(
+    instruction: str,
+    context_file: Optional[Path] = None,
+    suggested_files: Optional[list[str]] = None,
+    timeout: int = 240,
+    agent: Optional[str] = None,
+) -> Optional[Dict[str, str]]:
+    """Try configured backend first, then fall back through available agents.
+
+    Fallback order: configured backend → codex → claude → cursor_handoff
+    """
+    from .backends import get_codegen_backend, AGENT_FALLBACK_ORDER
+
+    configured = get_codegen_backend()
+    order = [configured] + [b for b in AGENT_FALLBACK_ORDER if b != configured]
+
+    for backend in order:
+        if backend == "dry_plan_only":
+            continue
+        if backend == "codex":
+            if not available():
+                _feed("🌊 Ocean: codex not available, trying next agent…")
+                continue
+            result = generate_files(instruction, context_file=context_file,
+                                    suggested_files=suggested_files, timeout=timeout, agent=agent)
+            if result:
+                return result
+            _feed("🌊 Ocean: codex returned nothing — trying next agent…")
+        elif backend == "claude":
+            try:
+                from . import claude_exec as _ce
+                if not _ce.available():
+                    _feed("🌊 Ocean: claude CLI not available, trying next agent…")
+                    continue
+                result = _ce.generate_files(instruction, context_file=context_file,
+                                            suggested_files=suggested_files, timeout=timeout, agent=agent)
+                if result:
+                    return result
+                _feed("🌊 Ocean: claude returned nothing — trying next agent…")
+            except Exception as e:
+                _feed(f"🌊 Ocean: claude error ({e}) — trying next agent…")
+        elif backend == "cursor_handoff":
+            _feed("🌊 Ocean: falling back to cursor — writing docs/handoffs/")
+            return {"__cursor_handoff__": instruction}
+
+    _feed("🌊 Ocean: all agents exhausted — no files generated.")
     return None
