@@ -1094,6 +1094,7 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
 
 @app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: Optional[bool] = typer.Option(None, "--version", help="Show version and exit", is_eager=True),
     verbose: bool = typer.Option(True, "--verbose/--quiet", help="Show detailed TUI conversations and agent steps"),
     ask: bool = typer.Option(True, "--ask/--no-ask", help="Allow agents to ask the user clarifying questions"),
@@ -1123,8 +1124,8 @@ def main(
         os.environ.pop("OCEAN_FORCE_CODEX", None)
         # Disable CrewAI integration to keep flow simple and local
         os.environ.setdefault("OCEAN_USE_CREWAI", "0")
-        # Always refresh PRD from current repository context in feed/workspace mode
-        os.environ.setdefault("OCEAN_REFRESH_PRD", "1")
+        # Use existing PRD if present; only synthesize from repo when there is none
+        os.environ.setdefault("OCEAN_REFRESH_PRD", "0")
     else:
         os.environ.pop("OCEAN_SIMPLE_FEED", None)
 
@@ -1134,6 +1135,9 @@ def main(
     except Exception:
         # Non-fatal; proceed in-place if workspace prep fails
         pass
+
+    if ctx.invoked_subcommand is None:
+        chat_repl()
 
 
 @app.command(help="Run onboarding: codegen → credentials → crew → clarify → planning → staging")
@@ -2090,7 +2094,10 @@ def chat_repl():
     console.print("[bold blue]🌊 OCEAN:[/bold blue] Chat REPL — type 'help' for options.")
     while True:
         try:
-            line = Prompt.ask("ocean>").strip()
+            if os.getenv("OCEAN_SIMPLE_FEED") == "1":
+                line = input("ocean> ").strip()
+            else:
+                line = Prompt.ask("ocean").strip()
         except (KeyboardInterrupt, EOFError):
             break
         if not line:
@@ -2132,12 +2139,14 @@ def chat_repl():
             if result and "__cursor_handoff__" in result:
                 feed("🌊 Ocean: Cursor handoff written to docs/handoffs/ — open in Cursor Composer.")
             elif result:
+                workspace = ROOT / "workspace"
+                workspace.mkdir(exist_ok=True)
                 for path, content in result.items():
-                    out = ROOT / path
+                    out = workspace / path
                     out.parent.mkdir(parents=True, exist_ok=True)
                     out.write_text(content, encoding="utf-8")
-                    feed(f"🌊 Ocean: ✅ wrote {path}")
-                console.print(f"✅ Build complete — {len(result)} file(s) written.")
+                    feed(f"🌊 Ocean: ✅ wrote workspace/{path}")
+                console.print(f"✅ Build complete — {len(result)} file(s) written to workspace/.")
             else:
                 console.print("Build returned no files. Run: ocean doctor")
             continue

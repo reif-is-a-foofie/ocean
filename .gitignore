@@ -80,6 +80,7 @@ logs/
 *.backup
 
 # Project specific
+workspace/
 bin/ocean-tui
 ocean_*/.config/
 ocean.egg-info/

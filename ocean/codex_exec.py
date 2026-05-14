@@ -755,13 +755,15 @@ def generate_files_with_fallback(
     configured = get_codegen_backend()
     order = [configured] + [b for b in AGENT_FALLBACK_ORDER if b != configured]
 
-    for backend in order:
+    for i, backend in enumerate(order):
         if backend == "dry_plan_only":
             continue
+        is_fallback = i > 0
         if backend == "codex":
             if not available():
-                _feed("🌊 Ocean: codex not available, trying next agent…")
+                _feed(f"🌊 Ocean: codex not on PATH — {'falling back' if is_fallback else 'skipping'}")
                 continue
+            _feed(f"🌊 Ocean: {'[fallback] ' if is_fallback else ''}trying codex…")
             result = generate_files(instruction, context_file=context_file,
                                     suggested_files=suggested_files, timeout=timeout, agent=agent)
             if result:
@@ -771,8 +773,9 @@ def generate_files_with_fallback(
             try:
                 from . import claude_exec as _ce
                 if not _ce.available():
-                    _feed("🌊 Ocean: claude CLI not available, trying next agent…")
+                    _feed("🌊 Ocean: claude CLI not on PATH — skipping")
                     continue
+                _feed(f"🌊 Ocean: {'[fallback] ' if is_fallback else ''}trying claude…")
                 result = _ce.generate_files(instruction, context_file=context_file,
                                             suggested_files=suggested_files, timeout=timeout, agent=agent)
                 if result:
@@ -781,7 +784,7 @@ def generate_files_with_fallback(
             except Exception as e:
                 _feed(f"🌊 Ocean: claude error ({e}) — trying next agent…")
         elif backend == "cursor_handoff":
-            _feed("🌊 Ocean: falling back to cursor — writing docs/handoffs/")
+            _feed(f"🌊 Ocean: {'[fallback] ' if is_fallback else ''}writing cursor handoffs to docs/handoffs/")
             return {"__cursor_handoff__": instruction}
 
     _feed("🌊 Ocean: all agents exhausted — no files generated.")
