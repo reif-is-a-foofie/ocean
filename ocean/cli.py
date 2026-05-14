@@ -1137,7 +1137,8 @@ def main(
         pass
 
     if ctx.invoked_subcommand is None:
-        chat_repl()
+        from .core.loop import run as _run_loop
+        _run_loop(cwd=ROOT)
 
 
 @app.command(help="Run onboarding: codegen → credentials → crew → clarify → planning → staging")
