@@ -3,13 +3,152 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ocean</title>
+    <meta
+      name="description"
+      content="OCEAN is a multi-agent software engineering orchestrator for planning, assigning, verifying, and shipping work with a FastAPI backend and static UI."
+    />
+    <title>OCEAN - Multi-Agent Software Engineering Orchestrator</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script>
-      window.API_BASE = window.API_BASE || "";
-    </script>
-    <script type="module" src="/src/main.tsx"></script>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header" aria-label="Primary navigation">
+      <nav class="nav-shell">
+        <a class="brand" href="#top" aria-label="OCEAN home">
+          <span class="brand-mark" aria-hidden="true">O</span>
+          <span>
+            <strong>OCEAN</strong>
+            <small>Multi-Agent Orchestrator</small>
+          </span>
+        </a>
+        <div class="nav-links" aria-label="Page sections">
+          <a href="#system">System</a>
+          <a href="#stack">Stack</a>
+          <a href="#handoff">Handoff</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section id="top" class="hero section-band">
+        <div class="hero-shell">
+          <div class="hero-copy">
+            <p class="eyebrow">Testing enabled. Containerized. FastAPI backed.</p>
+            <h1>OCEAN runs the crew. You steer the build.</h1>
+            <p class="lead">
+              A sharp control surface for multi-agent software engineering: product intent, backlog ownership, codegen context, runtime status, and verification in one disciplined loop.
+            </p>
+            <div class="hero-actions" aria-label="Primary actions">
+              <a class="button primary" href="#handoff">Start the handoff</a>
+              <a class="button secondary" href="#system">Inspect the system</a>
+            </div>
+          </div>
+
+          <figure class="orchestration-board" aria-label="OCEAN orchestration board preview">
+            <div class="board-topline">
+              <span>Live Project</span>
+              <strong>Ready</strong>
+            </div>
+            <div class="board-grid">
+              <div class="board-card captain">
+                <span class="node-dot"></span>
+                <strong>Captain</strong>
+                <p>Ranks the next valuable move.</p>
+              </div>
+              <div class="board-card q">
+                <span class="node-dot"></span>
+                <strong>Q</strong>
+                <p>Locks API contracts and tests.</p>
+              </div>
+              <div class="board-card edna">
+                <span class="node-dot"></span>
+                <strong>Edna</strong>
+                <p>Shapes the static interface.</p>
+              </div>
+              <div class="board-card mario">
+                <span class="node-dot"></span>
+                <strong>Mario</strong>
+                <p>Ships CI, Docker, deploys.</p>
+              </div>
+            </div>
+            <div class="pipeline" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <section id="system" class="section-band system-section">
+        <div class="content-shell">
+          <div class="section-heading">
+            <p class="eyebrow">System discipline</p>
+            <h2>One control plane for planning, execution, and proof.</h2>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span class="feature-kicker">01</span>
+              <h3>Backlog with owners</h3>
+              <p>Each task has a named agent, touched files, acceptance criteria, and a clean handoff path.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-kicker">02</span>
+              <h3>File-first context</h3>
+              <p>Project state stays reviewable in docs, doctrine, JSON, logs, and generated context summaries.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-kicker">03</span>
+              <h3>Verification loop</h3>
+              <p>Pytest, CI, runtime health, and test reports make done mean proven, not merely claimed.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="stack" class="section-band stack-section">
+        <div class="content-shell split-shell">
+          <div class="section-heading compact">
+            <p class="eyebrow">Detected stack</p>
+            <h2>Lean web architecture, built to move.</h2>
+            <p>
+              OCEAN keeps dependencies tight: a FastAPI service, a static UI, a Docker path, and GitHub Actions for the hard checks.
+            </p>
+          </div>
+          <dl class="stack-list">
+            <div>
+              <dt>Backend</dt>
+              <dd>FastAPI health and orchestration endpoints</dd>
+            </div>
+            <div>
+              <dt>Interface</dt>
+              <dd>Static, responsive, keyboard-friendly UI</dd>
+            </div>
+            <div>
+              <dt>Runtime</dt>
+              <dd>Docker-ready local and cloud deployment shape</dd>
+            </div>
+            <div>
+              <dt>Quality</dt>
+              <dd>Pytest suite with CI workflow coverage</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section id="handoff" class="section-band handoff-section">
+        <div class="content-shell handoff-panel">
+          <div>
+            <p class="eyebrow">Ready for codegen</p>
+            <h2>Hand OCEAN a goal. It returns the next precise job.</h2>
+            <p>
+              The crew and timing stay organized while the user keeps authority over scope, taste, verification, and the final call.
+            </p>
+          </div>
+          <a class="button primary" href="#top">Return to command</a>
+        </div>
+      </section>
+    </main>
   </body>
 </html>
