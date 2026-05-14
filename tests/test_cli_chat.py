@@ -12,6 +12,24 @@ def test_entrypoint_runs_help_when_args_present():
     assert "OCEAN CLI orchestrator" in r.output
 
 
+def test_ask_non_tty_skips_rich_prompt_outside_pytest(monkeypatch):
+    """Agent shells often have no TTY; Rich Prompt EOF prints Aborted — use defaults."""
+    import ocean.cli as cli_mod
+    from rich.prompt import Prompt
+
+    def boom(*_a, **_k):
+        raise AssertionError("Prompt.ask must not run when stdin is non-TTY outside pytest")
+
+    monkeypatch.setattr(Prompt, "ask", boom)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("OCEAN_TEST", raising=False)
+    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setenv("OCEAN_ALLOW_QUESTIONS", "1")
+
+    assert cli_mod._ask("label", default="hello") == "hello"
+    assert cli_mod._ask("pick", choices=["a", "b"], default="") == "a"
+
+
 def test_chat_non_interactive(monkeypatch, tmp_path):
     # Simulate a non-interactive run by patching Rich prompts
     from ocean import cli as cli_mod
@@ -62,7 +80,6 @@ def test_crew_command():
     assert "crew" in r.output
 
 
-def test_ui_command_is_listed():
-    r = runner.invoke(app, ["ui", "--help"])
+def test_doctor_command_is_listed():
+    r = runner.invoke(app, ["doctor", "--help"])
     assert r.exit_code == 0
-    assert "React control room" in r.output

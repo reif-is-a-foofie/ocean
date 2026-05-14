@@ -1,363 +1,142 @@
-# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
+# 🌊 OCEAN
 
-OCEAN (OCEAN can engineer Asinine Nonrequirements) is a **CLI/TUI multi-agent orchestrator** that spins up a software engineering team on demand.
+**Multi-agent software engineering orchestrator for the CLI.**
 
-**What we're solving:** teams shouldn’t need humans to **manually coordinate** every engineering step across disparate tools. **Ocean sits between you and your coding agents** (Codex CLI, OpenAI-backed codegen, MCP tools, etc.) — it runs clarification, planning, delegation, and handoff so delivery stays **orchestrated** instead of ad hoc chat sprawl.
+Ocean sits between you and your coding agents (Codex CLI, Claude CLI, Cursor). It runs clarification, planning, delegation, and handoff so delivery stays orchestrated — not ad hoc chat.
 
-### `ocean`: command not found?
-
-That happens when you run **`ocean` from a shell that has never been wired to your clone** (e.g. from `~` right after opening Terminal). The CLI is not a macOS system binary; it is installed **inside this repo** (or via a global npm/pip install).
-
-**Fastest fixes (pick one):**
-
-1. **From the repo root** (after `npm install` or `pip install -e .`):
-   ```bash
-   cd /path/to/ocean
-   npx ocean --help        # or: npm start
-   ```
-2. **Without `npx`:** `./venv/bin/ocean --help` or `./scripts/ocean --help` (wrapper that finds the venv).
-3. **From anywhere:** add the venv shim to your `PATH` in `~/.zshrc` (adjust the path to your clone):
-   ```bash
-   export PATH="/path/to/ocean/venv/bin:$PATH"
-   ```
-   or use the launcher: `alias ocean='/path/to/ocean/scripts/ocean'`
-4. **Global npm CLI:** from the repo root, `npm install -g .` — then `ocean` is on your PATH like other global npm bins.
-
-Use **npm** from the repo root (that installs the CLI + Python editable):
-
-```bash
-npm install
-npx ocean --help
+```
+reify@Reifs-MacBook-Pro ~ % ocean chat
+🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship. [09:30:29]
+🌊 Ocean: Workspace: /Users/reify/Classified/ocean/ocean_reify [09:30:31]
+🌊 Ocean: You drive goals. I run the crew, timing, and token budget.
+🌊 Ocean: Codegen backend → cursor_handoff [09:30:39]
+🤿 Ocean Doctor (preflight): codex=/usr/local/bin/codex ver=codex-cli 0.129.0 [09:30:50]
 ```
 
-Needs **Node 18+** and **Python 3.11+**. Postinstall creates `./venv` when missing (uses `python3.12` / `python3.11` / … on your PATH), upgrades **pip** (macOS Command Line Tools ships pip 21.x, which cannot install this repo’s editable setuptools layout). Skip auto-Python with `OCEAN_SKIP_PY_INSTALL=1 npm install`.
-
-**Without npm:** `python3 -m pip install -e .` then `python3 -m ocean`, or `./scripts/ocean`.
-
-### Cursor / assistants
-
-When asked to **run or open Ocean**, from repo root: `npm install` if needed, then **`npx ocean`** or **`npm start`**.
-
-## 🚀 Quick Start
-
-### 1. Install (npm — primary)
+## Install
 
 ```bash
-cd /path/to/ocean
-npm install
-npx ocean                  # full interactive flow (default command)
-npx ocean onboard          # optional: venv + pytest gate
+pip install ocean
+ocean --help
 ```
 
-Global CLI (optional): `npm install -g .` → then bare `ocean` works everywhere.
+Requires Python 3.11+. Codex CLI (`npm install -g @openai/codex`) or Claude CLI required for code generation.
 
-### 2. Python-only (optional)
+## How it works
+
+Ocean is an **orchestrator** — it does not write code itself. It:
+
+1. **Clarifies** your intent with Moroni (Architect)
+2. **Assembles** a crew — Moroni, Q, Edna, Mario, Tony
+3. **Dispatches** tasks to your agent CLI (Codex or Claude)
+4. **Verifies** results and surfaces what's next
+
+The agent does the coding. Ocean handles who gets what, when, and in what order.
+
+## Quick start
 
 ```bash
-python3 -m pip install -e .
-python3 -m ocean
+# Full interactive flow
+ocean chat
+
+# Quick REPL
+ocean chat-repl
 ```
 
-### 3. Common commands
+In the REPL:
 
-```bash
-npx ocean --help
-npx ocean clarify
-npx ocean crew
-npx ocean test
+```
+ocean> prd: build a task tracker CLI with add/list/done commands
+✅ PRD updated (docs/prd.md)
+
+ocean> plan
+🌊 Ocean: Preparing project context…
+✅ Plan ready.
+
+ocean> build
+🌊 Ocean: Dispatching to agent — building now…
+🌊 Ocean: ✅ wrote task_tracker.py
+✅ Build complete — 1 file(s) written.
+
+ocean> crew
+🕹️ Moroni
+  · Phase 1: gather resources. Phase 2: secure interfaces. 🕹️
+  · Skills — Vision synthesis, phased roadmaps, acceptance criteria …
+
+ocean> exit
 ```
 
-### 4. React control room
+## Commands
 
-```bash
-npm install    # already done for CLI
-npm run dev    # Vite — open http://127.0.0.1:5173/
-npx ocean ui   # Ocean-managed UI + API when you use this flow
-```
-
-API default `http://127.0.0.1:7777/` when using `ocean ui`.
-
-## 🎯 What OCEAN Does
-
-OCEAN is a **terminal-based orchestrator** — your **interface to coding agents**, not a replacement for them:
-
-1. **🤖 Clarifies your vision** - Moroni captures intent so agents don’t thrash
-2. **👥 Assembles your crew** - Named personas own slices of the SDLC (architecture, implementation, design, ops)
-3. **📋 Turns intent into work** - Backlog and plan so agents know what to do next
-4. **🚀 Delegates execution** - Hands tasks to codegen/tools while keeping one session log and repo truth
-
-Ocean still has a terminal-first CLI, but it also ships a React control room for direct chat, file inspection, feedback capture, and job handoff.
-
-## 🐸 Toad fork + Ocean
-
-The **product shell** is a **fork of [Toad](https://github.com/batrachianai/toad)** — the rich terminal UI for coding agents. **This repo stays Ocean**: the orchestrator you **`ocean`** into from that fork (typically subprocess). Clarification, crew, backlog/plan, delegation to Codex/MCP, and session logs stay here; Toad owns picking agents, markdown UX, pickers, and shell ergonomics. Toad is **AGPL**; comply when distributing a combined stack.
-
-### First-run onboarding
-
-When you eventually run **`ocean chat`** (feed style), it orders: **welcome → codegen backend → credentials → crew intro → Moroni clarify (project) → plan**. Structured lines are appended to **`logs/events-*.jsonl`** when **`OCEAN_EVENTS_FILE`** is set (done automatically each session).
-
-- **TTY / secrets:** **`OCEAN_SKIP_OPENAI_KEY_PROMPT=1`** skips the interactive `OPENAI_API_KEY` capture for `openai_api`. **`OCEAN_SKIP_BACKEND_PROMPT=1`** keeps the default Codex backend without prompting when stdin is non-interactive — or set **`OCEAN_CODEGEN_BACKEND`** / call MCP **`ocean_set_codegen_backend`** from the host shell (Toad).
-
-Contract for TUI hosts is documented in [**docs/toad_first_run.md**](docs/toad_first_run.md).
-
-### Default terminal (bare `ocean`)
-
-In a **TTY**, bare **`ocean`** **`exec`s Toad** when `toad` is available. If it isn’t, Ocean **tries to install** it (in order): **`pip install batrachian-toad`** into the current Python environment, then **`uv tool install`** if `uv` is on your PATH, then the **upstream** **`curl -fsSL https://batrachian.ai/install | sh`** (macOS / Linux). Set **`OCEAN_AUTO_INSTALL_TOAD=0`** to skip that and fall straight to **`ocean chat`**.
-
-Use **`OCEAN_DEFAULT_UI=chat`**, **`OCEAN_SKIP_TOAD=1`**, or a **non-TTY** for scripts and CI (feed only).
-
-**`ocean tui`:** same as launching Toad explicitly (still requires a TTY).
-
-### Where is the Toad UI?
-
-**Toad** is the default terminal experience for bare **`ocean`** when it’s installed — see [upstream](https://github.com/batrachianai/toad) or **`batrachian-toad`** on PyPI (Python 3.14+).
-
-**`ocean codex-chat`** remains a **Prompt Toolkit** helper — not Toad.
-
-### Codegen backend preference
-
-On an interactive TTY, Ocean can ask where codegen should run: **Codex CLI**, **OpenAI API** (`OPENAI_API_KEY`), **Cursor handoffs** (writes `docs/handoffs/` for Composer/Agent — no headless Cursor exec), or **plan-only**. The choice is saved to **`docs/ocean_prefs.json`**. Override with **`OCEAN_CODEGEN_BACKEND`** = `codex` \| `openai_api` \| `cursor_handoff` \| `dry_plan_only`. Use **`ocean mcp-server`** from Cursor for IDE integration.
-
-### Codex exec probe
-
-If **`codex exec`** fails (quota, billing, auth, etc.), Ocean **stops by default** when the backend is Codex. Set **`OCEAN_LOOSE_CODEX=1`** or **`OCEAN_STRICT_CODEX=0`** to continue with warnings only.
-
-### Ocean Doctor (preflight)
-
-Lines prefixed **Ocean Doctor (preflight)** at startup are **environment checks** (Codex path, token, sandbox), **not** crew personas. Run **`ocean doctor --explain`** for a one-line glossary.
-
-## 🔧 Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm install` | **Primary install** — Node deps + `bin/ocean`; postinstall runs `pip install -e .` |
-| `npx ocean` / `npm start` | Run CLI without global install (use when Cursor asks to open Ocean) |
-| `ocean` | **TTY:** install Toad if needed, then **`exec` Toad** · **non-TTY / skip:** **`chat`** |
-| `ocean onboard` | **First-run setup** — `venv`, `pip install -e .`, `pytest`, then `doctor` |
-| `ocean init --setup` | Same dev setup as `onboard` (then exits; no scaffold deprecation path) |
-| `ocean clarify` | Project clarification with Moroni (Architect) |
-| `ocean crew` | Meet the OCEAN crew and see their specialties |
-| `ocean init` | Generate/refresh project scaffolds |
-| `ocean test` | Run the test suite |
-| `ocean deploy` | Show deployment plan (dry-run) |
-| `ocean ui` | Start the React chat control room and local API |
+| Command | What it does |
+|---|---|
+| `ocean chat` | Full interactive flow — clarify → crew → plan → build |
+| `ocean chat-repl` | Quick REPL with `prd:` / `plan` / `build` / `crew` / `status` |
+| `ocean crew` | Show each agent's skills and voicing |
+| `ocean clarify` | Capture project intent, save `docs/project.json` |
+| `ocean doctor` | Check Codex/Claude auth and environment |
+| `ocean onboard` | First-run setup: venv + pip install + pytest |
 | `ocean mcp-server` | Run Ocean as a stdio MCP server for Cursor/Codex |
-| `ocean-mcp` | Direct MCP server entrypoint |
 
-## External MCP Product Loop
+## The crew
 
-Ocean can now guide a target codebase from the outside. Configure Cursor or another MCP client to launch `ocean-mcp`, or use the local React control room with `ocean ui`.
+Each agent owns a slice of the SDLC and has a voice defined in `docs/personas.yaml`:
 
-The control room is intentionally simple: one chat, a small five-person crew, and a file browser for context. File and doctrine changes happen through chat, for example:
+| Agent | Role |
+|---|---|
+| 🕹️ **Moroni** | Architect — vision, planning, crew coordination |
+| 🔧 **Q** | Backend — APIs, services, data models, tests |
+| 🎨 **Edna** | Design — UI/UX, tokens, accessibility, visual QA |
+| 🍄 **Mario** | DevOps — CI/CD, Docker, deployment, monitoring |
+| 🧪 **Tony** | Test pilot — stress tests, telemetry, bug triage |
 
-```text
-update VISION.md: Ocean stays simple: chat is the interface, files are context, and Cursor gets one job at a time.
-append to TASKS.md: Add first-run Cursor setup smoke test.
-Look at @ui/index.html and tell Cursor what to do next.
+## Codegen backends
+
+Set in `docs/ocean_prefs.json` or via `OCEAN_CODEGEN_BACKEND`:
+
+| Backend | How it works |
+|---|---|
+| `codex` | Calls `codex exec` directly (default when Codex is authed) |
+| `cursor_handoff` | Writes `docs/handoffs/` for Cursor Composer to pick up |
+| `openai_api` | Calls OpenAI API directly (requires `OPENAI_API_KEY`) |
+| `dry_plan_only` | Generates backlog/plan only, no code execution |
+
+## MCP server
+
+Ocean can run as an MCP server for Cursor or any MCP client:
+
+```bash
+ocean mcp-server
 ```
 
-Each crew member is rendered with an emoji identity so the conversation is easy to scan:
+Exposes `ocean_turn`, `ocean_next_action`, `ocean_record_feedback`, `ocean_bootstrap_doctrine`, `ocean_health`, `ocean_set_codegen_backend`.
 
-- `Captain` 🧭
-- `Edna` 🎨
-- `Q` 🛠️
-- `Mario` 🚢
-- `Scrooge` 💰
-
-Ocean does not ship a model. It keeps product doctrine, feedback, and task context, then uses the available brain:
-
-- Cursor or Codex can reason over the returned `advisor_prompt`.
-- Set `OCEAN_PM_ADVISOR_CMD='your-reasoning-cli --stdin'` to have Ocean call a local reasoning CLI.
-- Set `OCEAN_PM_ADVISOR=codex` to have Ocean ask `codex exec` for Product Manager judgment in a read-only sandbox.
-
-Ocean maintains product doctrine in the target repo:
-
-- `VISION.md`
-- `AUDIENCE.md`
-- `PRODUCT_PRINCIPLES.md`
-- `UX_RULES.md`
-- `POSITIONING.md`
-- `ROADMAP.md`
-- `TASKS.md`
-- `FEEDBACK.md`
-- `DECISIONS.md`
-
-The MCP server exposes:
-
-- `ocean_turn` — record optional feedback and return the next highest-value instruction.
-- `ocean_next_action` — rank candidate tasks by user value, setup friction reduced, trust increased, demo power, dependency value, and risk.
-- `ocean_record_feedback` — turn reactions into durable doctrine and tasks.
-- `ocean_bootstrap_doctrine` — create missing doctrine files without overwriting existing files.
-- `ocean_health` — environment snapshot incl. **`valid_codegen_backends`** and recovery hints (useful for onboarding pickers).
-- `ocean_set_codegen_backend` — write **`docs/ocean_prefs.json`** from a non-interactive host (e.g. Toad subprocess without a backend prompt).
-
-Each turn, Ocean pulls bounded build context from the target repo, including git state, detected stack, key docs/manifests, test report, backlog, and file tree. It sends that context to the available reasoning brain, asks for strict JSON, parses the result, and returns `advisor_recommendation` plus coding-agent instructions.
-
-The default crew is capped at five actors:
-
-- `Captain`: product orchestration and scope.
-- `Edna`: UX, onboarding, and product feel.
-- `Q`: implementation.
-- `Mario`: verification and shipping.
-- `Scrooge`: impact, adoption, and money.
-
-See `docs/mcp_cursor.md` for Cursor configuration.
-
-## 🤖 The OCEAN Crew
-
-OCEAN spins up a **Codex-powered software engineering team** with specialized agents:
-
-### **Moroni** — Architect & Brain
-- **Role:** Clarifies vision, orchestrates the team, creates project specifications
-- **Capabilities:** Project planning, milestone definition, coordination
-- **Deliverables:** Project specs, coordination plans, architectural decisions
-
-### **Q** — Backend Engineer
-- **Role:** Builds APIs, services, data models, and backend infrastructure
-- **Capabilities:** FastAPI development, database design, API integration
-- **Deliverables:** Backend services, data models, API endpoints
-
-### **Edna** — Designer & UI/UX Engineer
-- **Role:** Creates user interfaces, design systems, and user experience flows
-- **Capabilities:** UI design, CSS/HTML, design tokens, user flows
-- **Deliverables:** Frontend interfaces, design systems, user experience
-
-### **Mario** — DevOps Engineer
-- **Role:** Handles deployment, CI/CD, infrastructure, and cloud platforms
-- **Capabilities:** Docker, CI/CD pipelines, cloud deployment, monitoring
-- **Deliverables:** Deployment configs, CI workflows, live applications
-
-## 🌟 CLI/TUI Features
-
-### **Rich Terminal Experience**
-- **Beautiful tables** - Project summaries, crew info, backlog display
-- **Progress indicators** - Visual feedback during operations
-- **Color-coded output** - Easy to read and navigate
-- **Interactive prompts** - Guided project clarification
-
-### **Session Management**
-- **Automatic logging** - Every session saved to timestamped log files
-- **Project persistence** - Saves and loads project specifications
-- **Audit trail** - Track all agent interactions and decisions
-
-### **Project Scaffolding**
-- **Backend templates** - FastAPI, tests, CI workflows
-- **Frontend placeholders** - HTML, CSS, design tokens
-- **DevOps configs** - Docker, deployment, monitoring
-- **Documentation** - Project specs, plans, backlogs
-
-## 🏗️ Project Structure
+## Project layout
 
 ```
+docs/
+  prd.md          — what to build (set via `prd:` in REPL)
+  project.json    — clarified spec (name, kind, goals, vision)
+  personas.yaml   — agent voices and skills
+  plan.md         — generated backlog
+  handoffs/       — Cursor handoff files (cursor_handoff mode)
+logs/
+  events-*.jsonl  — structured session events
 ocean/
-├── ocean/              # CLI application (core)
-│   ├── cli.py         # Command interface
-│   ├── agents.py      # Agent definitions
-│   ├── models.py      # Data models
-│   └── planner.py     # Task planning
-├── docs/              # Documentation & specs
-├── logs/              # Session logs
-├── backend/           # Generated backend scaffolds
-├── ui/                # Generated frontend scaffolds
-├── devops/            # Generated deployment configs
-├── tests/             # Generated test suites
-├── .github/           # Generated CI/CD workflows
-├── pyproject.toml     # Package configuration
-└── .cursorrules       # Development rules
+  cli.py          — all commands
+  codex_exec.py   — Codex CLI dispatch
+  persona.py      — voice loading from personas.yaml
+  planner.py      — backlog generation and execution
+  pty_harness.py  — PTY driver for integration tests
 ```
 
-## 🧪 Testing
+## Testing
 
 ```bash
-# Run all tests
-ocean test
-
-# Run specific test suites
-pytest tests/
+pytest tests/       # 70 tests, ~25s
+ocean doctor        # environment + auth check
 ```
 
-## 🚀 Deployment
+## License
 
-### Show Deployment Plan
-```bash
-# Preview deployment steps
-ocean deploy --dry-run
-
-# Execute deployment (when implemented)
-ocean deploy --no-dry-run
-```
-
-## 🔄 Development Workflow
-
-1. **Start OCEAN:** `ocean` (interactive flow)
-2. **Clarify vision:** Answer Moroni's questions
-3. **Meet the crew:** See your AI team
-4. **Get your plan:** Review backlog and tasks
-5. **Generate scaffolds:** `ocean init` to create project files
-6. **Iterate:** Run `ocean` again to refine
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Command not found:**
-```bash
-# Ensure virtual environment is activated
-source venv/bin/activate
-pip install -e .
-```
-
-**Tests failing:**
-```bash
-# Check dependencies
-pip install -e .
-# Run specific test
-pytest tests/ -v
-```
-
-**No project spec:**
-```bash
-# Run clarification first
-ocean clarify
-```
-
-## 📚 Next Steps
-
-- [ ] Add more agent capabilities
-- [ ] Implement task execution
-- [ ] Add database persistence
-- [ ] Deploy to cloud platform
-- [ ] Add authentication and user management
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests: `ocean test`
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
-
-## 🔄 Recent Transformation
-
-OCEAN has been **transformed from a web application back to its intended purpose**: a powerful CLI/TUI multi-agent orchestrator. 
-
-**What was removed:**
-- ❌ Web servers and APIs
-- ❌ Browser-based UI
-- ❌ Docker containers
-- ❌ Complex deployment configs
-
-**What remains:**
-- ✅ **Rich CLI/TUI experience** with beautiful tables and progress bars
-- ✅ **Multi-agent orchestration** - Moroni, Q, Edna, Mario
-- ✅ **Project scaffolding** and planning
-- ✅ **Session logging** and persistence
-- ✅ **Clean, focused architecture**
-
-OCEAN is now **exactly what it was meant to be**: a terminal-based orchestrator that spins up your AI-powered software engineering team! 🎯 
+MIT

@@ -85,3 +85,44 @@ def voice_brief(agent: str, context: Optional[str] = None, max_chars: int = 400)
     if len(brief) > max_chars:
         brief = brief[: max_chars - 1] + "…"
     return brief
+
+
+_CREW_FEED_ORDER: tuple[str, ...] = ("Moroni", "Q", "Edna", "Mario", "Tony")
+
+
+def agent_voice_skills_chat_lines(agent: str, *, max_skill_items: int = 12, style_level: str | None = None) -> list[str]:
+    """Terminal-chat lines derived from personas.yaml (voice + skills)."""
+    lvl = (style_level or (os.getenv("OCEAN_STYLE") or "max")).strip().lower()
+    p = load_personas().get(agent, {})
+    lines: list[str] = []
+    cal = p.get("calibration")
+    if isinstance(cal, dict) and cal.get("do"):
+        lines.append(str(cal["do"]))
+    traits = p.get("traits")
+    if lvl == "max" and isinstance(traits, list) and traits:
+        lines.append("; ".join(str(t) for t in traits[:2]))
+    skills = p.get("skills")
+    if isinstance(skills, list) and skills:
+        cap = min(max_skill_items, len(skills))
+        snippet = " · ".join(str(s) for s in skills[:cap])
+        if len(skills) > cap:
+            snippet += " …"
+        lines.append(f"Skills — {snippet}")
+    if not lines:
+        lines.append("(No persona in docs/personas.yaml for this agent yet.)")
+    return lines
+
+
+def crew_cards_plain_text(order: tuple[str, ...] | None = None) -> str:
+    """Multi-line plaintext card for Chat REPL / quick reference."""
+    from .personas import AGENT_EMOJI
+
+    names = order or _CREW_FEED_ORDER
+    segments: list[str] = []
+    for agent in names:
+        ic = AGENT_EMOJI.get(agent, "🤖")
+        segments.append(f"{ic} {agent}")
+        for part in agent_voice_skills_chat_lines(agent):
+            segments.append(f"  · {part}")
+        segments.append("")
+    return "\n".join(segments).rstrip()

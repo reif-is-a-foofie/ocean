@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from click.exceptions import Abort
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
@@ -25,9 +26,9 @@ from .planner import generate_backlog, execute_backlog
 from .mcp import MCP
 from . import context as ctx
 from . import codex_exec
-from .persona import voice_brief
+from .persona import agent_voice_skills_chat_lines, crew_cards_plain_text, voice_brief
 from .feed import feed as feed_line, you_say, agent_say as feed_agent_say
-from .personas import CREW_SUMMARY
+from .personas import AGENT_EMOJI, CREW_SUMMARY
 from .backends import (
     VALID_BACKENDS,
     get_codegen_backend,
@@ -55,12 +56,15 @@ def _external_startup_disabled() -> bool:
 console = Console()
 # Route all console output through the feed by default to avoid column offsets and stray ANSI
 if os.getenv("OCEAN_FEED_ONLY", "1") not in ("0", "false", "False"):
+    import re as _re
+    _RICH_TAG = _re.compile(r"\[/?[a-zA-Z][^\[\]]*\]")
+
     def _cprint_to_feed(*args, **kwargs):  # noqa: ANN001
         try:
             msg = " ".join(str(a) for a in args)
         except Exception:
             msg = " ".join(map(str, args))
-        feed(msg)
+        feed(_RICH_TAG.sub("", msg))
     try:
         console.print = _cprint_to_feed  # type: ignore[attr-defined]
     except Exception:
@@ -117,56 +121,49 @@ def _create_venv(path: Path) -> None:
         subprocess.run([sys.executable, "-m", "venv", str(path)], check=False)
 
 
-def _start_local_runtime_simple() -> Optional[str]:
-    """Start backend with uvicorn and serve UI via http.server in the background.
-
-    Returns a summary URL string or None.
-    """
-    logs_dir = LOGS
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backend_app = BACKEND / "app.py"
-    backend_url = None
-    try:
-        import uvicorn  # noqa: F401
-        uvicorn_available = True
-    except Exception:
-        uvicorn_available = shutil.which("uvicorn") is not None
-    if backend_app.exists() and uvicorn_available:
-        import socket
-        def _free(start=8000, limit=20):
-            p = start
-            for _ in range(limit):
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    try:
-                        s.bind(("127.0.0.1", p))
-                        return p
-                    except OSError:
-                        p += 1
-            return start
-        port = _free(8000)
-        blog = logs_dir / f"runtime-backend-{ts}.log"
-        with blog.open("a", encoding="utf-8") as out:
-            subprocess.Popen([sys.executable, "-m", "uvicorn", "backend.app:app", "--host", "127.0.0.1", "--port", str(port)], stdout=out, stderr=subprocess.STDOUT)
-        backend_url = f"http://127.0.0.1:{port}/healthz"
-    ui_dir = UI
-    ui_url = None
-    if ui_dir.exists():
-        ui_port = 5173
-        ulog = logs_dir / f"runtime-ui-{ts}.log"
-        with ulog.open("a", encoding="utf-8") as out:
-            subprocess.Popen([sys.executable, "-m", "http.server", str(ui_port), "-d", str(ui_dir)], stdout=out, stderr=subprocess.STDOUT)
-        ui_url = f"http://127.0.0.1:{ui_port}"
-        # Write runtime config consumed by UI if backend started
-        if backend_url:
+def _free_port(start: int = 8000, limit: int = 20) -> int:
+    import socket
+    p = start
+    for _ in range(limit):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
-                api_base = backend_url.rsplit('/healthz', 1)[0]
-                (ui_dir / "config.js").write_text(f"window.API_BASE=\"{api_base}\";\n", encoding="utf-8")
-            except Exception:
-                pass
-    summary = " | ".join([u for u in [backend_url, ui_url] if u])
-    return summary or None
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                p += 1
+    return start
+
+
+def _start_local_runtime_simple() -> Optional[str]:
+    """Start FastAPI backend in a background thread (single process, no subprocesses).
+
+    The FastAPI app already serves static UI files at /ui via StaticFiles.
+    Returns the base URL string or None.
+    """
+    import threading
+    backend_app = BACKEND / "app.py"
+    if not backend_app.exists():
+        return None
+    try:
+        import uvicorn
+    except ImportError:
+        return None
+    port = _free_port(8000)
+    ui_dir = UI
+    if ui_dir.exists():
+        try:
+            api_base = f"http://127.0.0.1:{port}"
+            (ui_dir / "config.js").write_text(f"window.API_BASE=\"{api_base}\";\n", encoding="utf-8")
+        except Exception:
+            pass
+    t = threading.Thread(
+        target=uvicorn.run,
+        kwargs={"app": "backend.app:app", "host": "127.0.0.1", "port": port, "log_level": "warning"},
+        daemon=True,
+    )
+    t.start()
+    return f"http://127.0.0.1:{port}"
 
 
 def _ensure_codex_auth() -> None:
@@ -722,13 +719,17 @@ def _prepare_workspace_from_cwd() -> None:
         return [n for n in names if n in patterns]
     try:
         # shutil.copytree with dirs_exist_ok for incremental sync
+        _skip = {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", "venv", ".venv", "node_modules", "logs", ".mypy_cache", ".DS_Store"}
         for item in here.iterdir():
-            if item.name in {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", "venv", ".venv", "node_modules", "logs", ".mypy_cache", ".DS_Store"}:
+            if item.name in _skip:
                 continue
             target = dest / item.name
             if item.is_dir():
                 shutil.copytree(item, target, dirs_exist_ok=True, ignore=_ignore)
             else:
+                # Skip non-regular files (sockets, pipes, devices)
+                if not item.is_file():
+                    continue
                 try:
                     shutil.copy2(item, target)
                 except Exception:
@@ -746,13 +747,13 @@ def _prepare_workspace_from_cwd() -> None:
         (dest / ".ocean_workspace").write_text(json.dumps({"source": str(here), "createdAt": datetime.now().isoformat()}, indent=2), encoding="utf-8")
         feed(f"🌊 Ocean: Created/updated workspace at {dest} (source: {here})")
     except Exception as e:
-        feed(f"[yellow]🌊 Ocean: Workspace synchronization warning: {e}[/yellow]")
+        feed(f"🌊 Ocean: Workspace synchronization warning: {e}")
     # Switch to workspace and rebind roots
     try:
         os.chdir(dest)
         _switch_root(dest)
     except Exception as e:
-        feed(f"[red]🌊 Ocean: Failed to switch to workspace: {e}[/red]")
+        feed(f"🌊 Ocean: Failed to switch to workspace: {e}")
 
 
 def write_log(path: Path, *lines: str) -> None:
@@ -1024,10 +1025,20 @@ def _prompt_project_directory_if_needed(log: Path) -> None:
     emit_setup("phase_end", id="project_root")
 
 
+def _noninteractive_prompt_answer(default: str, choices: Optional[list[str]]) -> str:
+    """Fallback when stdin is not a real teletype (CI, pipes, agent runners)."""
+    if default:
+        return default
+    if choices:
+        return choices[0]
+    return ""
+
+
 def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> str:
     """Robust prompt helper.
 
-    - Uses Rich Prompt in test mode (OCEAN_TEST=1) to remain patchable by tests.
+    - Uses Rich Prompt under pytest / ``OCEAN_TEST`` so tests can monkeypatch ``Prompt.ask``.
+    - Uses defaults when stdin is not a TTY outside tests (no Rich ``Aborted`` on EOF).
     - Uses Typer's prompt in normal interactive runs for better TTY behavior.
     - Validates choices if provided.
     """
@@ -1040,9 +1051,13 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
         # Choose first choice if provided, else empty string
         return (choices[0] if choices else "") if choices else ""
 
-    # In test mode or non-TTY, use Rich Prompt (works with monkeypatch in tests)
-    if _os.getenv("OCEAN_TEST") == "1" or not sys.stdin.isatty():
+    # Pytest harness: Rich Prompt stays monkeypatch-friendly.
+    if _is_test_env():
         return Prompt.ask(label, default=default, choices=choices)
+
+    # Non-interactive stdin: avoid Rich Prompt (EOF prints "Aborted." and exits).
+    if not sys.stdin.isatty():
+        return _noninteractive_prompt_answer(default, choices)
 
     # Simple combined-feed mode: inline prompt using input() with a consistent prefix
     if _os.getenv("OCEAN_SIMPLE_FEED") == "1":
@@ -1067,7 +1082,10 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
     # Build label with choices hint if provided
     hint = f" [choices: {', '.join(choices)}]" if choices else ""
     while True:
-        ans = typer.prompt(f"{label}{hint}", default=default)
+        try:
+            ans = typer.prompt(f"{label}{hint}", default=default)
+        except (EOFError, Abort):
+            ans = _noninteractive_prompt_answer(default, choices)
         if choices and ans not in choices:
             console.print(f"[yellow]Please choose one of: {', '.join(choices)}[/yellow]")
             continue
@@ -1180,6 +1198,9 @@ def chat(
         feed(f"🌊 Ocean: Workspace: {Path.cwd()}")
         feed(
             "🌊 Ocean: **You drive goals.** I run the crew, timing, and token budget—you never orchestrate specialists yourself."
+        )
+        feed(
+            "🌊 Ocean: Each crewmate has voicing + skills in docs/personas.yaml — emoji lines in chat show who’s speaking."
         )
     else:
         console.print(banner())
@@ -1409,71 +1430,6 @@ def mcp_server():
     run_mcp_server()
 
 
-@app.command(help="Start the React control room with a local API backend")
-def ui(
-    api_host: str = typer.Option("127.0.0.1", "--api-host", help="Host for the FastAPI backend"),
-    api_port: int = typer.Option(7777, "--api-port", help="Port for the FastAPI backend"),
-    ui_host: str = typer.Option("127.0.0.1", "--ui-host", help="Host for the Vite dev server"),
-    ui_port: int = typer.Option(5173, "--ui-port", help="Port for the Vite dev server"),
-):
-    """Run the chat-first React control room."""
-    ensure_repo_structure()
-    if not (BACKEND / "app.py").exists():
-        console.print("[red]❌ backend/app.py is missing.[/red]")
-        raise typer.Exit(code=1)
-    if not shutil.which("npm"):
-        console.print("[red]❌ npm is required to run the React control room.[/red]")
-        raise typer.Exit(code=1)
-
-    logs_dir = LOGS
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backend_log = logs_dir / f"ui-backend-{timestamp}.log"
-    ui_log = logs_dir / f"ui-frontend-{timestamp}.log"
-
-    backend_out = backend_log.open("a", encoding="utf-8")
-    ui_out = ui_log.open("a", encoding="utf-8")
-    backend_proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "backend.app:app", "--host", api_host, "--port", str(api_port)],
-        stdout=backend_out,
-        stderr=subprocess.STDOUT,
-    )
-    ui_proc = subprocess.Popen(
-        ["npm", "run", "dev", "--", "--host", ui_host, "--port", str(ui_port)],
-        stdout=ui_out,
-        stderr=subprocess.STDOUT,
-    )
-
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] React control room started.")
-    console.print(f"🌐 API: http://{api_host}:{api_port}")
-    console.print(f"💬 UI: http://{ui_host}:{ui_port}")
-
-    try:
-        ui_proc.wait()
-    except KeyboardInterrupt:
-        console.print("\n👋 [yellow]Control room stopped by user.[/yellow]")
-    finally:
-        for proc in (ui_proc, backend_proc):
-            if proc.poll() is None:
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
-        for proc in (ui_proc, backend_proc):
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-        for handle in (ui_out, backend_out):
-            try:
-                handle.close()
-            except Exception:
-                pass
-
-
 def _do_clarify(log: Path) -> None:
     """OCEAN consults with Moroni to clarify the project vision"""
     ensure_repo_structure()
@@ -1633,6 +1589,9 @@ def _do_crew(log: Path) -> None:
     for agent in default_agents():
         intro_full = agent.introduce()
         feed_agent_say(agent.name, agent.introduce_detail())
+        for vx in agent_voice_skills_chat_lines(agent.name):
+            ich = AGENT_EMOJI.get(agent.name, "🤖")
+            feed_line(f"   {ich} · {vx}")
         write_log(log, intro_full)
         summary = CREW_SUMMARY.get(agent.name)
         if summary:
@@ -2024,59 +1983,6 @@ def test():
         raise typer.Exit(code=1)
 
 
-@app.command(help="Start the backend server and optionally serve UI")
-def run(host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
-        port: int = typer.Option(8000, "--port", help="Port to bind to"),
-        serve_ui: bool = typer.Option(False, "--ui", help="Also serve UI files"),
-        yes: bool = typer.Option(False, "-y", "--yes", help="Do not prompt; install deps")):
-    """Start the backend server"""
-    ensure_repo_structure()
-
-    # Create session log for server run
-    log = session_log_path()
-
-    if not (BACKEND / "app.py").exists():
-        console.print("[yellow]⚠️ No backend app found. Run 'ocean init' first to generate scaffolds.[/yellow]")
-        write_log(log, "[OCEAN] Server run failed: No backend app found")
-        raise typer.Exit(code=1)
-
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] Starting your generated backend server...")
-    console.print(f"🌐 Backend: http://{host}:{port}")
-
-    if serve_ui:
-        console.print(f"🎨 UI: http://{host}:{port}/ui")
-
-    try:
-        # Install dependencies if needed, with confirmation
-        do_install = yes or Confirm.ask("📦 Install/upgrade server dependencies with pip?", default=False)
-        if do_install:
-            console.print("📦 Installing dependencies...")
-            subprocess.run([sys.executable, "-m", "pip", "install", "fastapi[all]", "uvicorn"],
-                          capture_output=True, check=True)
-        else:
-            console.print("[yellow]Skipping dependency installation.[/yellow]")
-
-        # Log server start
-        write_log(log, f"[OCEAN] Starting server on {host}:{port}")
-
-        # Start the server
-        console.print("🚀 Starting uvicorn server...")
-        subprocess.run([
-            sys.executable, "-m", "uvicorn",
-            "backend.app:app",
-            "--host", host,
-            "--port", str(port),
-            "--reload"
-        ])
-
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]❌ Failed to install dependencies: {e}[/red]")
-        write_log(log, f"[OCEAN] Server run failed: {e}")
-        raise typer.Exit(code=1)
-    except KeyboardInterrupt:
-        console.print("\n👋 [yellow]Server stopped by user.[/yellow]")
-        write_log(log, "[OCEAN] Server stopped by user")
-        raise typer.Exit(code=0)
 
 
 @app.command(help="Show a dry-run deployment plan")
@@ -2175,6 +2081,7 @@ def chat_repl():
 
     Commands:
       - prd: <text>        Replace docs/prd.md with text
+      - crew               Show each agent’s voicing & skills (from docs/personas.yaml)
       - plan               Generate plan/backlog (no deploy)
       - build              Full chat flow without staging
       - stage              Deploy to local staging (Compose or fallback)
@@ -2183,6 +2090,7 @@ def chat_repl():
       - exit               Quit
     """
     ensure_repo_structure()
+    os.environ.setdefault("OCEAN_SIMPLE_FEED", "1")
     console.print("[bold blue]🌊 OCEAN:[/bold blue] Chat REPL — type 'help' for options.")
     while True:
         try:
@@ -2194,7 +2102,12 @@ def chat_repl():
         if line in {"exit", "quit"}:
             break
         if line == "help":
-            console.print("Commands: prd: <text> | plan | build | stage | deploy | status | exit")
+            console.print(
+                "Commands: prd: <text> | crew | plan | build | stage | deploy | status | exit"
+            )
+            continue
+        if line in {"crew", "voices", "skills"}:
+            console.print(crew_cards_plain_text())
             continue
         if line.startswith("prd:"):
             text = line.split(":", 1)[1].strip()
@@ -2203,14 +2116,30 @@ def chat_repl():
             continue
         if line == "plan":
             log = session_log_path()
+            # Preserve a PRD the user just set — don't overwrite from repo
+            if (DOCS / "prd.md").exists():
+                os.environ["OCEAN_REFRESH_PRD"] = "0"
             _do_clarify(log)
-            console.print("✅ Plan generated.")
+            console.print("✅ Plan ready.")
             continue
         if line == "build":
-            try:
-                chat(prd=None, stage=False, prod=False)  # type: ignore[call-arg]
-            except SystemExit:
-                pass
+            prd_path = DOCS / "prd.md"
+            prd_text = prd_path.read_text(encoding="utf-8").strip() if prd_path.exists() else ""
+            if not prd_text:
+                console.print("No PRD set. Use: prd: <what to build>")
+                continue
+            from . import codex_exec as _cx
+            feed("🌊 Ocean: Dispatching to agent — building now…")
+            result = _cx.generate_files(prd_text, context_file=DOCS / "project.json")
+            if result:
+                for path, content in result.items():
+                    out = ROOT / path
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_text(content, encoding="utf-8")
+                    feed(f"🌊 Ocean: ✅ wrote {path}")
+                console.print(f"✅ Build complete — {len(result)} file(s) written.")
+            else:
+                console.print("Build returned no files. Check codex auth: ocean doctor")
             continue
         if line in {"stage", "deploy"}:
             try:
@@ -2230,13 +2159,13 @@ def chat_repl():
 
 
 
-@app.command(help="Toad terminal UI (install: https://batrachian.ai/install)")
+@app.command(help="[Deprecated] Points at Textual shell + chat; use bare `ocean` or `ocean chat`")
 def tui():
-    """Replace this process with **Toad**. There is no alternate in-repo terminal UI."""
     ensure_repo_structure()
-    from . import launcher
-
-    launcher.launch_toad_or_die()
+    console.print(
+        "[bold blue]🌊 Ocean[/bold blue] default UI is the Textual shell (`ocean` with no args).\n"
+        "   Feed flow: [cyan]ocean chat[/cyan] · quick REPL: [cyan]ocean chat-repl[/cyan]"
+    )
 
 
 @app.command(name="codex-chat", help="Start a Codex-style chat wrapped with Ocean branding (Codex required)")
@@ -2609,12 +2538,24 @@ def scout():
 
 
 def entrypoint():
-    # Bare ``ocean`` on TTY: ``exec`` Toad when available; else ``ocean chat``.
+    # Bare ``ocean``: Textual shell on an interactive TTY; ``ocean chat`` when
+    # non-TTY / pytest / ``OCEAN_DEFAULT_UI=chat``.
     if len(sys.argv) == 1:
         from . import launcher
 
-        launcher.handoff_default_shell()
-        sys.argv.extend(launcher.resolve_bare_ocean_argv())
+        if (
+            launcher.want_chat_instead_of_tui()
+            or launcher.is_automation()
+            or not launcher.is_interactive_terminal()
+        ):
+            sys.argv.extend(launcher.resolve_bare_ocean_argv())
+            app()
+            return
+        ensure_repo_structure()
+        from ocean.ui.app import run_ocean_textual_app
+
+        run_ocean_textual_app()
+        return
     app()
 
 
