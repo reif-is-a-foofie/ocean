@@ -42,7 +42,7 @@ function pyOk311(cmd) {
   return r.status === 0;
 }
 
-/** First interpreter on PATH that is Python 3.11+ (prefer 3.14+ so PyPI `batrachian-toad` installs). */
+/** First interpreter on PATH that is Python 3.11+. */
 function pickBootstrapPython() {
   const candidates = ["python3.14", "python3.13", "python3.12", "python3.11", "python3"];
   const override = process.env.PYTHON?.trim();
@@ -97,7 +97,7 @@ if (r.status !== 0) {
   );
 } else {
   console.log(
-    "ocean: Python package installed. Run `npx ocean` or ./venv/bin/ocean — use `ocean tui` for the Toad terminal UI.",
+    "ocean: Python package installed. Run `npx ocean` or ./venv/bin/ocean — default TTY UI is `ocean` (Textual).",
   );
 }
 process.exit(0);

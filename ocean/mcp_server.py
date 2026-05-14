@@ -92,7 +92,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ocean_set_codegen_backend": {
         "description": (
-            "Persist codegen backend preference to docs/ocean_prefs.json (for non-TTY hosts e.g. Toad). "
+            "Persist codegen backend preference to docs/ocean_prefs.json (for non-TTY hosts). "
             "Valid values: codex | openai_api | cursor_handoff | dry_plan_only."
         ),
         "inputSchema": {

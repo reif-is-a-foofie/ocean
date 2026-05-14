@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Full interactive Ocean (real TTY): planning + codegen after clarify — no OCEAN_TEST=1.
 # Use a normal Cursor/iTerm window. Tune backend with OCEAN_CODEGEN_BACKEND or let prompts run.
+#
+# Faster iteration modes:
+#   • Automated TTY smoke (crew in chat-repl):  python -m pytest tests/test_pty_harness.py -q
+#   • Scripted PTY API (for tools/CI):          see ocean.pty_harness.run_under_pty_scripted
+#   • Capture-only PTY (single command):       python -m ocean.pty_harness -- python -m ocean --version
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

@@ -1,0 +1,20 @@
+# Daily validation: chat crew personas + skills (docs/personas.yaml).
+# Also available on-demand via workflow_dispatch.
+name: Personas daily
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: pip install -e .
+      - name: Validate persona skills
+        run: python scripts/check_personas_skills.py

@@ -1,4 +1,4 @@
-"""Append structured JSON lines to ``OCEAN_EVENTS_FILE`` for external TUIs (e.g. Toad fork)."""
+"""Append structured JSON lines to ``OCEAN_EVENTS_FILE`` for external hosts / tooling."""
 
 from __future__ import annotations
 

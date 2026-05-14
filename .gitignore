@@ -60,7 +60,7 @@ coverage.xml
 .hypothesis/
 
 # Logs
-logs/*.log
+logs/
 *.log
 
 # Environment variables

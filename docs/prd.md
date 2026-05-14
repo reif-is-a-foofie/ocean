@@ -1,7 +1,7 @@
-# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
+# 🌊 OCEAN
 
 ## Summary
-# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
+# 🌊 OCEAN
 
 ## Goals
 - testing enabled

@@ -4,14 +4,14 @@
 
 Implement OCEAN — a CLI multi‑agent **orchestrator** between the user and coding agents (Codex, MCP, etc.) — as a series of small, verifiable milestones. Cursor should follow these atomic tasks, produce incremental deliverables, and persist all artifacts in the repository.
 
-**Product integration:** The intended UX is a **fork of [Toad](https://github.com/batrachianai/toad)** that invokes **`ocean`**; keep orchestration and agent personas in this repo, not a full duplicate TUI. Respect **AGPL** when coupling distributions.
+**Product integration:** Terminal-first experience: bare **`ocean`** opens the **Textual** control shell on a TTY; **`ocean chat`** is the emoji feed with persona voicing in **`docs/personas.yaml`**. **`ocean tui`** is deprecated (points at Textual + chat).
 
 ## Global Guardrails
 
 - **Production regression:** From repo root run **`bash scripts/regression.sh`** (full **`pytest tests/`**, **`scripts/mcp_stdio_smoke.py`**, **`ocean --help`** / **`ocean --version`**). Prefer **`./venv/bin/python`** when a venv exists (the script picks it up). Do not treat **`pytest tests/`** alone as the full production bar unless the user explicitly narrows scope.
 - **Install / run via npm:** From repo root `npm install` wires the **`ocean`** CLI (`package.json` → `bin/ocean.js`) and runs **`pip install -e .`** in postinstall (skip with `OCEAN_SKIP_PY_INSTALL=1`). To open the orchestrator when the user asks for Ocean: **`npx ocean`** or **`npm start`** from the repo root (after `npm install` if needed).
-- Single entrypoint: `ocean` (no args) on a **TTY** tries **`exec` Toad**, **auto-installing** it when missing (`pip` → `uv` → upstream curl installer; disable with **`OCEAN_AUTO_INSTALL_TOAD=0`**); otherwise **`ocean chat`**. Use **`OCEAN_DEFAULT_UI=chat`** / **`OCEAN_SKIP_TOAD=1`** / non-TTY for feed-only.
-- Cross‑platform: macOS, Linux; Python 3.11+ (**PyPI Toad** [`batrachian-toad`](https://pypi.org/project/batrachian-toad/) installs with Ocean on **Python 3.14+**; use [upstream installer](https://github.com/batrachianai/toad) on older interpreters).
+- Single entrypoint: `ocean` (no args) runs the **Textual control shell** on an interactive TTY; use **`ocean chat`** for the feed flow, or **`OCEAN_DEFAULT_UI=chat`** to make bare `ocean` use chat. Persona voices + skills ship in **`docs/personas.yaml`** and surface in-chat during crew assembly.
+- Cross‑platform: macOS, Linux; Python 3.11+.
 - Keep changes minimal and focused per milestone; no unrelated refactors.
 - Never remove logs or user content; only append.
 - Confirm before network/deploy actions; print dry‑run steps when credentials missing.

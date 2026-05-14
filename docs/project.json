@@ -1,5 +1,5 @@
 {
-  "name": "🌊 OCEAN - Multi-Agent Software Engineering Orchestrator",
+  "name": "🌊 OCEAN",
   "kind": "web",
   "description": "## Summary",
   "goals": [
@@ -12,6 +12,6 @@
     "minimal dependencies"
   ],
   "vision": "## Summary",
-  "ai_identity": "Your coding partner on **🌊 OCEAN - Multi-Agent Software Engineering Orchestrator** — Ocean runs the crew and timing; you steer goals and say when we're done.",
-  "createdAt": "2026-05-11T15:11:19.245550"
+  "ai_identity": "Your coding partner on **🌊 OCEAN** — Ocean runs the crew and timing; you steer goals and say when we're done.",
+  "createdAt": "2026-05-14T11:23:09.664020"
 }
