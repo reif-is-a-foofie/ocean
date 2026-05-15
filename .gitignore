@@ -81,6 +81,7 @@ logs/
 
 # Project specific
 workspace/
+projects/bench-*/
 bin/ocean-tui
 ocean_*/.config/
 ocean.egg-info/

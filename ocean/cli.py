@@ -2018,6 +2018,59 @@ def provision(name: Optional[str] = typer.Option(None, "--name", help="Project n
     console.print("🔗 Open: http://127.0.0.1:8000/healthz | http://127.0.0.1:5173")
 
 
+@app.command(name="bench", help="Bench harness: clone/copy repo, trace decisions, evidence logs/bench-*")
+def bench(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print plan only; no clone or pipeline"),
+    list_repos: bool = typer.Option(False, "--list", "-l", help="List allowlisted repos and exit"),
+    i_understand_network: bool = typer.Option(
+        False,
+        "--i-understand-network",
+        help="Consent to git clone from network (or set OCEAN_BENCH_NETWORK=1)",
+    ),
+    repo_url: Optional[str] = typer.Option(None, "--repo-url", help="Clone this URL instead of allowlist pick"),
+    repo_path: Optional[str] = typer.Option(None, "--repo-path", help="Copy this local directory into an isolated bench workspace"),
+    run_codegen: bool = typer.Option(True, "--codegen/--no-codegen", help="Call LLM/codegen for a tiny bench artifact"),
+    run_pytest: bool = typer.Option(False, "--pytest", help="Run pytest -q in the bench workspace"),
+    seed: Optional[int] = typer.Option(None, "--seed", help="Deterministic allowlist pick"),
+):
+    """Run the external-repo bench; writes JSON + Markdown under logs/."""
+    from . import bench_runner as br
+
+    ensure_repo_structure()
+    allowlist = ROOT / "docs" / "bench_repos.yaml"
+    out_dir = LOGS.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        result = br.bench_repo_from_cli(
+            ocean_root=ROOT.resolve(),
+            output_dir=out_dir,
+            allowlist_path=allowlist,
+            dry_run=dry_run,
+            list_only=list_repos,
+            allow_network_flag=i_understand_network,
+            repo_url=repo_url,
+            repo_path=repo_path,
+            run_codegen=run_codegen,
+            run_pytest=run_pytest,
+            seed=seed,
+        )
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=2)
+    if list_repos:
+        if isinstance(result, list):
+            for s in result:
+                console.print(f"- {s.name}  {s.url or s.path}  tags={getattr(s, 'tags', [])}")
+        raise typer.Exit(code=0)
+    assert isinstance(result, dict)
+    if dry_run:
+        console.print(json.dumps(result, indent=2))
+        raise typer.Exit(code=0)
+    bid = result.get("bench_id", "unknown")
+    console.print(f"✅ Bench complete. Reports: logs/bench-{bid}.json , logs/bench-{bid}.md")
+    raise typer.Exit(code=0)
+
+
 @app.command(help="Run backend tests via pytest")
 def test():
     """Run the test suite"""

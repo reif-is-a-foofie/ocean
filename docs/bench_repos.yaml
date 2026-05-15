@@ -1,0 +1,6 @@
+# Curated repos for `ocean bench` (random pick = choice from this list).
+# Add only small, license-clear repos you are willing to clone.
+repos:
+  - name: sampleproject
+    url: https://github.com/pypa/sampleproject
+    tags: [python, packaging]
