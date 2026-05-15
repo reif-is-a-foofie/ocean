@@ -1,7 +1,7 @@
 {
   "name": "ocean",
   "private": true,
-  "version": "0.2.27",
+  "version": "0.2.28",
   "description": "Orchestrator CLI between you and coding agents (Python Typer backend; npm installs the `ocean` command)",
   "type": "module",
   "bin": {

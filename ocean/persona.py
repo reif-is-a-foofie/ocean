@@ -66,6 +66,16 @@ def voice_brief(agent: str, context: Optional[str] = None, max_chars: int = 400)
         parts.append(f"Voice traits: {traits}.")
     if skills_s and style_level == "max":
         parts.append(f"Apply expertise: {skills_s}.")
+    sd = p.get("skill_discovery")
+    if isinstance(sd, list) and sd and style_level == "max":
+        parts.append(
+            "Skill discovery themes: "
+            + "; ".join(str(x) for x in sd[:4] if str(x).strip())
+            + "."
+        )
+    rf = p.get("research_focus")
+    if isinstance(rf, str) and rf.strip() and style_level == "max":
+        parts.append(f"Research focus: {rf.strip()}.")
     if background and style_level == "max":
         if len(background) > 280:
             background = background[:279] + "…"
@@ -108,6 +118,16 @@ def agent_voice_skills_chat_lines(agent: str, *, max_skill_items: int = 12, styl
         if len(skills) > cap:
             snippet += " …"
         lines.append(f"Skills — {snippet}")
+    sd = p.get("skill_discovery")
+    if lvl == "max" and isinstance(sd, list) and sd:
+        cap_sd = min(8, len(sd))
+        snippet_sd = " · ".join(str(s) for s in sd[:cap_sd])
+        if len(sd) > cap_sd:
+            snippet_sd += " …"
+        lines.append(f"Skill discovery — {snippet_sd}")
+    rf = p.get("research_focus")
+    if lvl == "max" and isinstance(rf, str) and rf.strip():
+        lines.append(f"Research focus — {rf.strip()}")
     if not lines:
         lines.append("(No persona in docs/personas.yaml for this agent yet.)")
     return lines

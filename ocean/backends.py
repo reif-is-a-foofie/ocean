@@ -12,7 +12,26 @@ from typing import Any
 
 PREFS_RELATIVE = Path("docs") / "ocean_prefs.json"
 
-VALID_BACKENDS = frozenset({"codex", "claude", "openai_api", "cursor_handoff", "dry_plan_only"})
+VALID_BACKENDS = frozenset(
+    {"codex", "claude", "openai_api", "gemini_api", "cursor_handoff", "dry_plan_only"}
+)
+
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
+
+GEMINI_MODEL_MENU: tuple[tuple[str, str], ...] = (
+    ("1", "gemini-flash-latest"),
+    ("2", "gemini-2.0-flash"),
+    ("3", "gemini-1.5-pro-latest"),
+    ("4", "gemini-1.5-flash-latest"),
+)
+
+OPENAI_MODEL_MENU: tuple[tuple[str, str], ...] = (
+    ("1", "gpt-4o-mini"),
+    ("2", "gpt-4o"),
+    ("3", "gpt-4.1-mini"),
+    ("4", "o4-mini"),
+)
 
 # Ordered fallback chain — first available and healthy agent wins
 AGENT_FALLBACK_ORDER = ("codex", "claude", "cursor_handoff")
@@ -75,8 +94,106 @@ def probe_openai_api_key() -> bool:
     return bool(os.getenv("OPENAI_API_KEY", "").strip())
 
 
+def probe_gemini_api_key() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip())
+
+
 def probe_cursor_cli() -> bool:
     return shutil.which("cursor") is not None or shutil.which("cursor-agent") is not None
+
+
+def get_openai_model(cwd: Path | None = None) -> str:
+    """Resolved OpenAI chat model: ``OCEAN_OPENAI_MODEL`` env, then ``openai_model`` in prefs, then default."""
+    env_m = (os.getenv("OCEAN_OPENAI_MODEL") or os.getenv("OCEAN_CODEX_MODEL") or "").strip()
+    if env_m:
+        return env_m
+    disk = (load_prefs(cwd).get("openai_model") or "").strip()
+    if disk:
+        return disk
+    return DEFAULT_OPENAI_MODEL
+
+
+def get_gemini_model(cwd: Path | None = None) -> str:
+    """Resolved Gemini model id: ``OCEAN_GEMINI_MODEL`` env, then ``gemini_model`` in prefs, then default."""
+    env_m = (os.getenv("OCEAN_GEMINI_MODEL") or "").strip()
+    if env_m:
+        return env_m
+    disk = (load_prefs(cwd).get("gemini_model") or "").strip()
+    if disk:
+        return disk
+    return DEFAULT_GEMINI_MODEL
+
+
+def prompt_codegen_model_if_needed(backend: str, cwd: Path | None = None) -> str:
+    """When backend uses HTTP APIs, persist a model choice (interactive once; prefs thereafter)."""
+    root = cwd or Path.cwd()
+    if backend == "openai_api":
+        return _prompt_openai_model_menu(root)
+    if backend == "gemini_api":
+        return _prompt_gemini_model_menu(root)
+    return ""
+
+
+def _prompt_openai_model_menu(root: Path) -> str:
+    if os.getenv("OCEAN_TEST") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
+        return get_openai_model(root)
+    if os.getenv("OCEAN_SKIP_MODEL_PROMPT") in ("1", "true", "True"):
+        return get_openai_model(root)
+    if not _interactive_stdin():
+        return get_openai_model(root)
+    if (os.getenv("OCEAN_OPENAI_MODEL") or os.getenv("OCEAN_CODEX_MODEL") or "").strip():
+        return get_openai_model(root)
+    data = load_prefs(root)
+    if (data.get("openai_model") or "").strip():
+        return get_openai_model(root)
+    try:
+        from rich.prompt import Prompt
+
+        lines = ["Pick OpenAI model for codegen (API):"] + [
+            f"  [{k}] {mid}" for k, mid in OPENAI_MODEL_MENU
+        ]
+        print("\n".join(lines))
+        choice = Prompt.ask(
+            "Choose model (1–4)",
+            choices=[k for k, _ in OPENAI_MODEL_MENU],
+            default="1",
+        )
+    except Exception:
+        return get_openai_model(root)
+    picked = dict(OPENAI_MODEL_MENU).get(choice.strip(), DEFAULT_OPENAI_MODEL)
+    save_prefs({"openai_model": picked}, root)
+    return picked
+
+
+def _prompt_gemini_model_menu(root: Path) -> str:
+    if os.getenv("OCEAN_TEST") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
+        return get_gemini_model(root)
+    if os.getenv("OCEAN_SKIP_MODEL_PROMPT") in ("1", "true", "True"):
+        return get_gemini_model(root)
+    if not _interactive_stdin():
+        return get_gemini_model(root)
+    if (os.getenv("OCEAN_GEMINI_MODEL") or "").strip():
+        return get_gemini_model(root)
+    data = load_prefs(root)
+    if (data.get("gemini_model") or "").strip():
+        return get_gemini_model(root)
+    try:
+        from rich.prompt import Prompt
+
+        lines = ["Pick Gemini model for codegen (API):"] + [
+            f"  [{k}] {mid}" for k, mid in GEMINI_MODEL_MENU
+        ]
+        print("\n".join(lines))
+        choice = Prompt.ask(
+            "Choose model (1–4)",
+            choices=[k for k, _ in GEMINI_MODEL_MENU],
+            default="1",
+        )
+    except Exception:
+        return get_gemini_model(root)
+    picked = dict(GEMINI_MODEL_MENU).get(choice.strip(), DEFAULT_GEMINI_MODEL)
+    save_prefs({"gemini_model": picked}, root)
+    return picked
 
 
 def probe_snapshot(cwd: Path | None = None) -> dict[str, Any]:
@@ -86,9 +203,12 @@ def probe_snapshot(cwd: Path | None = None) -> dict[str, Any]:
         "codex_cli": probe_codex_cli_installed(),
         "claude_cli": probe_claude_cli_installed(),
         "openai_api_key": probe_openai_api_key(),
+        "gemini_api_key": probe_gemini_api_key(),
         "cursor_cli": probe_cursor_cli(),
         "docs_dir": str(root / "docs"),
         "prefs_file": str(prefs_path(root)),
+        "openai_model": get_openai_model(root),
+        "gemini_model": get_gemini_model(root),
     }
 
 
@@ -135,7 +255,8 @@ def prompt_codegen_backend_if_needed(cwd: Path | None = None) -> str:
         f"  [2] claude — Anthropic Claude CLI ({'found' if snap['claude_cli'] else 'not on PATH'})",
         "  [3] cursor — Cursor IDE handoffs (writes docs/handoffs/ for Composer)",
         f"  [4] openai_api — OpenAI API direct ({'key set' if snap['openai_api_key'] else 'no key'})",
-        "  [5] dry_plan_only — plan only, no codegen",
+        f"  [5] gemini_api — Google Gemini API ({'key set' if snap['gemini_api_key'] else 'no key'})",
+        "  [6] dry_plan_only — plan only, no codegen",
     ]
     # Auto-detect best default
     if snap["codex_cli"]:
@@ -145,21 +266,28 @@ def prompt_codegen_backend_if_needed(cwd: Path | None = None) -> str:
     elif snap["cursor_cli"]:
         default_choice = "3"
     else:
-        default_choice = "5"
+        default_choice = "6"
     try:
         from rich.prompt import Prompt
 
         print("\n".join(lines))
         choice = Prompt.ask(
-            "Choose agent (1–5)",
-            choices=["1", "2", "3", "4", "5"],
+            "Choose agent (1–6)",
+            choices=["1", "2", "3", "4", "5", "6"],
             default=default_choice,
         )
     except Exception:
         set_codegen_backend_env("codex")
         return "codex"
 
-    mapping = {"1": "codex", "2": "claude", "3": "cursor_handoff", "4": "openai_api", "5": "dry_plan_only"}
+    mapping = {
+        "1": "codex",
+        "2": "claude",
+        "3": "cursor_handoff",
+        "4": "openai_api",
+        "5": "gemini_api",
+        "6": "dry_plan_only",
+    }
     backend = mapping.get(choice.strip(), "codex")
     save_prefs({"codegen_backend": backend}, root)
     set_codegen_backend_env(backend)

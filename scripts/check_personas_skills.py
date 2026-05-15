@@ -48,6 +48,16 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if not all(isinstance(s, str) and s.strip() for s in skills):
             errors.append(f"{name}: each skill must be a non-empty string")
+            continue
+        sd = persona.get("skill_discovery")
+        if sd is not None:
+            if not isinstance(sd, list) or len(sd) == 0:
+                errors.append(f"{name}: skill_discovery must be a non-empty YAML list when present")
+            elif not all(isinstance(s, str) and s.strip() for s in sd):
+                errors.append(f"{name}: each skill_discovery item must be a non-empty string")
+        rf = persona.get("research_focus")
+        if rf is not None and (not isinstance(rf, str) or not rf.strip()):
+            errors.append(f"{name}: research_focus must be a non-empty string when present")
 
     if errors:
         print("Persona skills check failed:", file=sys.stderr)

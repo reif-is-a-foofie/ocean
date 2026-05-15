@@ -1,4 +1,4 @@
-"""Textual-first Moroni-style clarify flow (no Rich prompts; answers via command line)."""
+"""Moroni-style clarify flow using CLI / scripted inputs (no full-screen UI)."""
 
 from __future__ import annotations
 

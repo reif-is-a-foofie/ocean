@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+"""Doctrine, feedback, and next-action guidance for Ocean as product intelligence (not the coding agent).
+
+Canonical multi-phase loop spec: ``docs/ocean_autonomous_product_intelligence_loop.md``.
+"""
+
 import json
 import re
 import subprocess
@@ -28,9 +33,11 @@ DOCTRINE_FILES = [
 DEFAULT_DOCTRINE: dict[str, str] = {
     "VISION.md": """# Vision
 
-Ocean is an external product intelligence layer for agentic coding tools.
+Ocean is an external product intelligence layer for agentic coding tools—not a coding agent itself.
 
-It helps a coding agent decide what to do next by asking whether the work made the product more useful to the intended user, not only whether the code passed.
+It continuously asks: **What is the smallest next change that makes this product more valuable to the intended user?**
+
+Specialized personas surface competing priorities; productive disagreement is a feature. The goal is user value, learning speed, and coherent sequencing—not feature count or code volume.
 """,
     "AUDIENCE.md": """# Audience
 
@@ -40,10 +47,12 @@ They need fast setup, trustworthy guidance, and a path to one useful automation 
 """,
     "PRODUCT_PRINCIPLES.md": """# Product Principles
 
-- Ask: "What is the smallest next change that makes this more valuable to the target user?"
-- Protect user value over feature volume.
+- Governing question: **What is the smallest next change that makes this more valuable to the target user?**
+- Optimize for user value, learning speed, and implementation efficiency—not feature count, persona pageantry, or token spend for its own sake.
+- Protect user value over feature volume; treat implementation bandwidth and tokens as scarce.
 - Prefer plain assistant language over developer jargon unless the user asks for technical detail.
 - Keep orchestration outside the target codebase whenever possible.
+- Let personas disagree; resolve through evidence, doctrine, and ranked next work—not voting theater.
 """,
     "UX_RULES.md": """# UX Rules
 
@@ -52,15 +61,18 @@ They need fast setup, trustworthy guidance, and a path to one useful automation 
 """,
     "POSITIONING.md": """# Positioning
 
-Ocean is a companion product manager for coding agents.
+Ocean is a companion product manager for coding agents: it turns feedback, doctrine, tasks, and test results into the next highest-value instruction.
 
-It turns feedback, doctrine, tasks, and test results into the next highest-value instruction.
+**Constitutional layer** (VISION, AUDIENCE, PRINCIPLES, UX, DECISIONS) changes slowly and preserves identity. **Evidence layer** (FEEDBACK, TASKS, ROADMAP execution notes) changes every turn.
+
+Personas **globally read** peers’ proposals and evidence, **locally write** their own proposals under `docs/proposals/` (see `docs/ocean_autonomous_product_intelligence_loop.md`).
 """,
     "ROADMAP.md": """# Roadmap
 
+- Proposal board rounds: publish → peer read → self-revision → synthesis → ranked queue (see `docs/proposals/`).
 - External MCP server usable from Cursor and Codex.
 - Feedback scribe that turns reactions into durable doctrine.
-- Product manager agent that ranks the next smallest valuable change.
+- Product manager advisor that ranks the next smallest valuable change using doctrine + board state.
 - Captain loop that assigns implementation work based on product value.
 """,
     "TASKS.md": """# Tasks
@@ -75,6 +87,7 @@ Feedback Scribe entries are appended here.
     "DECISIONS.md": """# Decisions
 
 - Ocean should guide target codebases from the outside instead of becoming the codebase.
+- Canonical multi-phase autonomous loop spec: `docs/ocean_autonomous_product_intelligence_loop.md`.
 """,
 }
 
@@ -224,6 +237,12 @@ def next_action(
         "local_scored_tasks": [task.__dict__ for task in scored[:max_tasks]],
         "note": "Ocean is model-agnostic. Use this payload with the host AI brain or configured advisor command.",
     }
+    try:
+        from . import proposal_board as _pb
+
+        advisor_payload["proposal_board"] = _pb.list_board(root)
+    except Exception:
+        advisor_payload["proposal_board"] = {}
     advisor_prompt = build_pm_prompt(advisor_payload)
     advisor = ask_pm_advisor(advisor_payload, cwd=root) if use_advisor else None
     advisor_recommendation = normalize_advisor_recommendation(advisor.data if advisor else None)

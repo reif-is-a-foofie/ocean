@@ -33,6 +33,7 @@ from .backends import (
     VALID_BACKENDS,
     get_codegen_backend,
     prompt_codegen_backend_if_needed,
+    prompt_codegen_model_if_needed,
     apply_backend_env_from_prefs,
     probe_snapshot,
 )
@@ -582,6 +583,44 @@ def _prompt_openai_api_key_if_needed() -> None:
     feed(f"🌊 Ocean: OPENAI_API_KEY saved to .env (len={len(raw)}, prefix={masked})")
 
 
+def _prompt_gemini_api_key_if_needed() -> None:
+    """If GEMINI_API_KEY and GOOGLE_API_KEY are unset, prompt (hidden) and merge into ``.env``."""
+    if (os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()):
+        return
+    if os.getenv("OCEAN_SKIP_GEMINI_KEY_PROMPT") in ("1", "true", "True"):
+        return
+    if _is_test_env():
+        return
+    if os.getenv("OCEAN_ALLOW_QUESTIONS", "1") in ("0", "false", "False"):
+        return
+    emit_setup(
+        "question",
+        id="gemini_api_key",
+        message="GEMINI_API_KEY required for gemini_api backend (value is not logged).",
+        secure=True,
+    )
+    if not _interactive_secret_stdin():
+        emit_setup(
+            "info",
+            id="gemini_api_key",
+            skipped="non_tty",
+            message="Set GEMINI_API_KEY or GOOGLE_API_KEY in the environment or .env; interactive prompt needs a TTY.",
+        )
+        return
+    try:
+        raw = getpass.getpass("GEMINI_API_KEY (input hidden): ").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        emit_setup("info", id="gemini_api_key", saved=False, empty=True)
+        return
+    merge_dotenv_assignments(ROOT / ".env", {"GEMINI_API_KEY": raw})
+    os.environ["GEMINI_API_KEY"] = raw
+    masked = (raw[:6] + "…") if len(raw) > 6 else "(set)"
+    emit_setup("phase_end", id="gemini_api_key", saved=True, prefix_masked=masked)
+    feed(f"🌊 Ocean: GEMINI_API_KEY saved to .env (len={len(raw)}, prefix={masked})")
+
+
 def _run_setup_credentials(backend: str) -> None:
     """Backend-specific credential steps (Codex auth, OpenAI key, or skip)."""
     emit_setup("phase_start", id="credentials", codegen_backend=backend)
@@ -592,6 +631,9 @@ def _run_setup_credentials(backend: str) -> None:
             emit_setup("info", id="credentials", codex_auth_attempted=not _external_startup_disabled())
         elif backend == "openai_api":
             _prompt_openai_api_key_if_needed()
+            _load_env_file(ROOT / ".env")
+        elif backend == "gemini_api":
+            _prompt_gemini_api_key_if_needed()
             _load_env_file(ROOT / ".env")
         elif backend == "cursor_handoff":
             feed(
@@ -1096,7 +1138,7 @@ def _ask(label: str, default: str = "", choices: Optional[list[str]] = None) -> 
 def main(
     ctx: typer.Context,
     version: Optional[bool] = typer.Option(None, "--version", help="Show version and exit", is_eager=True),
-    verbose: bool = typer.Option(True, "--verbose/--quiet", help="Show detailed TUI conversations and agent steps"),
+    verbose: bool = typer.Option(True, "--verbose/--quiet", help="Show detailed agent and orchestration steps"),
     ask: bool = typer.Option(True, "--ask/--no-ask", help="Allow agents to ask the user clarifying questions"),
     style: str = typer.Option("max", "--style", help="Persona style intensity: 'max' or 'low'", show_default=True),
     no_ui: bool = typer.Option(False, "--no-ui", help="Run in streaming mode (no full-screen UI)"),
@@ -1110,7 +1152,9 @@ def main(
     os.environ.setdefault("RICH_DISABLE", "1")
     # Propagate verbosity to subprocess-aware modules
     os.environ["OCEAN_VERBOSE"] = "1" if verbose else "0"
-    os.environ["OCEAN_ALLOW_QUESTIONS"] = "1" if ask else "0"
+    os.environ["OCEAN_ALLOW_QUESTIONS"] = (
+        "0" if not ask else os.environ.get("OCEAN_ALLOW_QUESTIONS", "1")
+    )
     # Persona style toggle (default: max)
     s = (style or "max").strip().lower()
     if s not in {"max", "low"}:
@@ -1165,7 +1209,7 @@ def chat(
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     log = LOGS / f"session-{timestamp}.log"
     write_log(log, "OCEAN session started", datetime.now().isoformat())
-    # Create structured events file for TUI
+    # Create structured events file (feed / integrations)
     events_file = LOGS / f"events-{timestamp}.jsonl"
     os.environ["OCEAN_EVENTS_FILE"] = str(events_file)
     try:
@@ -1234,6 +1278,37 @@ def chat(
     token_budget.feed_status_if_needed(feed)
 
     _run_setup_credentials(get_codegen_backend())
+
+    emit_setup("phase_start", id="model_choice")
+    emit_setup(
+        "question",
+        id="codegen_model",
+        message="Pick API model (OpenAI / Gemini backends only; stored in docs/ocean_prefs.json)",
+    )
+    try:
+        _bk_for_model = get_codegen_backend()
+        _model_pick = prompt_codegen_model_if_needed(_bk_for_model, Path.cwd())
+        if _model_pick:
+            feed(f"🌊 Ocean: Codegen model → {_model_pick}")
+            emit_setup("answer", id="codegen_model", model=_model_pick, codegen_backend=_bk_for_model)
+    except Exception:
+        pass
+    emit_setup("phase_end", id="model_choice")
+
+    if not _is_test_env():
+        try:
+            from .brain_client import early_brain_enabled, fetch_early_loop_brain_text
+
+            if early_brain_enabled():
+                tip = fetch_early_loop_brain_text(cwd=ROOT, timeout=20.0)
+                if tip:
+                    feed("🌊 Ocean: Early brain (doctrine → next focus):")
+                    for raw in tip.splitlines():
+                        line = raw.strip()
+                        if line:
+                            feed(f"   {line}")
+        except Exception:
+            pass
 
     _codex_startup_needed = get_codegen_backend() == "codex"
 
@@ -1362,6 +1437,11 @@ def chat(
                 feed("🌊 Ocean: ❌ Backend openai_api requires OPENAI_API_KEY.")
                 raise typer.Exit(code=1)
             feed("🌊 Ocean: Preflight: using OpenAI API backend (skipping Codex CLI check).")
+        elif _be_preflight == "gemini_api":
+            if not (os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()):
+                feed("🌊 Ocean: ❌ Backend gemini_api requires GEMINI_API_KEY or GOOGLE_API_KEY.")
+                raise typer.Exit(code=1)
+            feed("🌊 Ocean: Preflight: using Gemini API backend (skipping Codex CLI check).")
         elif _be_preflight in ("cursor_handoff", "dry_plan_only"):
             feed(f"🌊 Ocean: Preflight: backend={_be_preflight} (skipping Codex execution readiness).")
         elif os.getenv("OCEAN_DISABLE_CODEX") not in ("1", "true", "True"):
@@ -2169,15 +2249,6 @@ def chat_repl():
 
 
 
-@app.command(help="[Deprecated] Points at Textual shell + chat; use bare `ocean` or `ocean chat`")
-def tui():
-    ensure_repo_structure()
-    console.print(
-        "[bold blue]🌊 Ocean[/bold blue] default UI is the Textual shell (`ocean` with no args).\n"
-        "   Feed flow: [cyan]ocean chat[/cyan] · quick REPL: [cyan]ocean chat-repl[/cyan]"
-    )
-
-
 @app.command(name="codex-chat", help="Start a Codex-style chat wrapped with Ocean branding (Codex required)")
 def codex_chat():
     """Ocean-wrapped Codex chat with an Ocean banner and init/auth handled up front."""
@@ -2250,6 +2321,10 @@ def loop(
     if _bk_loop == "openai_api":
         if not os.getenv("OPENAI_API_KEY"):
             feed("🌊 Ocean: ❌ Backend openai_api requires OPENAI_API_KEY.")
+            raise typer.Exit(code=1)
+    elif _bk_loop == "gemini_api":
+        if not (os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()):
+            feed("🌊 Ocean: ❌ Backend gemini_api requires GEMINI_API_KEY or GOOGLE_API_KEY.")
             raise typer.Exit(code=1)
     elif _bk_loop == "codex":
         _ensure_codex_auth()
@@ -2548,24 +2623,11 @@ def scout():
 
 
 def entrypoint():
-    # Bare ``ocean``: Textual shell on an interactive TTY; ``ocean chat`` when
-    # non-TTY / pytest / ``OCEAN_DEFAULT_UI=chat``.
+    # Bare ``ocean`` (no subcommand): same interactive feed as ``ocean chat``.
     if len(sys.argv) == 1:
         from . import launcher
 
-        if (
-            launcher.want_chat_instead_of_tui()
-            or launcher.is_automation()
-            or not launcher.is_interactive_terminal()
-        ):
-            sys.argv.extend(launcher.resolve_bare_ocean_argv())
-            app()
-            return
-        ensure_repo_structure()
-        from ocean.ui.app import run_ocean_textual_app
-
-        run_ocean_textual_app()
-        return
+        sys.argv.extend(launcher.resolve_bare_ocean_argv())
     app()
 
 

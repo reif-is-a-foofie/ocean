@@ -21,4 +21,7 @@ echo "== Ocean regression: CLI smoke =="
 "$PY" -m ocean --help >/dev/null
 "$PY" -m ocean --version
 
+echo "== Ocean regression: ocean (bare → chat, real venv entrypoint) =="
+bash "$ROOT/scripts/ocean_chat_real_smoke.sh"
+
 echo "== OK =="

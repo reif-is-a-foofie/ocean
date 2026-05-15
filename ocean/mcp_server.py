@@ -93,7 +93,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ocean_set_codegen_backend": {
         "description": (
             "Persist codegen backend preference to docs/ocean_prefs.json (for non-TTY hosts). "
-            "Valid values: codex | openai_api | cursor_handoff | dry_plan_only."
+            "Valid values: codex | claude | openai_api | gemini_api | cursor_handoff | dry_plan_only."
         ),
         "inputSchema": {
             "type": "object",
@@ -185,6 +185,10 @@ def handle_ocean_health(args: dict[str, Any]) -> dict[str, Any]:
     if backend == "openai_api" and not snap["openai_api_key"]:
         hints.append(
             "Backend is openai_api but OPENAI_API_KEY is unset; export it or set codegen_backend in docs/ocean_prefs.json."
+        )
+    if backend == "gemini_api" and not snap["gemini_api_key"]:
+        hints.append(
+            "Backend is gemini_api but GEMINI_API_KEY (or GOOGLE_API_KEY) is unset; export it or switch codegen backend."
         )
     if backend == "codex" and not snap["codex_cli"]:
         hints.append(

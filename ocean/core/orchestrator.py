@@ -16,7 +16,7 @@ class CommandResult(Enum):
 
 
 class Orchestrator:
-    """Command dispatch + Textual-first onboarding until ``docs/project.json`` exists."""
+    """Command dispatch + onboarding until ``docs/project.json`` exists."""
 
     def __init__(self, cwd: Path | None = None) -> None:
         self.cwd = Path(cwd or Path.cwd()).resolve()

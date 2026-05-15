@@ -14,7 +14,7 @@ def pilot_failure_report(
     app: Any | None = None,
     exc: BaseException | None = None,
 ) -> dict[str, Any]:
-    """Structured report when a Textual Pilot assertion or workflow fails."""
+    """Structured report when a Pilot-style assertion or workflow fails."""
     export: dict[str, Any] | None = None
     recent_events: list[dict[str, Any]] = []
     if app is not None and hasattr(app, "export_state"):
@@ -31,9 +31,8 @@ def pilot_failure_report(
     suspected: str | None = None
     if exc and tb:
         for prefix, label in (
-            ("ocean/ui/", "ocean.ui"),
             ("ocean/core/", "ocean.core"),
-            ("textual/", "textual"),
+            ("ocean/cli.py", "ocean.cli"),
         ):
             if prefix in tb:
                 suspected = label

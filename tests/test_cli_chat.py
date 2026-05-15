@@ -6,10 +6,34 @@ from ocean.cli import app, entrypoint
 runner = CliRunner()
 
 
-def test_entrypoint_runs_help_when_args_present():
-    r = runner.invoke(app, ["--help"])  # use app directly
-    assert r.exit_code == 0
-    assert "OCEAN CLI orchestrator" in r.output
+def test_entrypoint_bare_adds_chat_subcommand(monkeypatch):
+    import ocean.cli as cli_mod
+
+    recorded: list[list[str]] = []
+
+    def capture_app() -> None:
+        recorded.append(list(cli_mod.sys.argv))
+
+    monkeypatch.setattr(cli_mod, "app", capture_app)
+    monkeypatch.setattr(cli_mod.sys, "argv", ["ocean"])
+    cli_mod.entrypoint()
+    assert cli_mod.sys.argv == ["ocean", "chat"]
+    assert recorded == [["ocean", "chat"]]
+
+
+def test_entrypoint_with_args_untouched(monkeypatch):
+    import ocean.cli as cli_mod
+
+    recorded: list[list[str]] = []
+
+    def capture_app() -> None:
+        recorded.append(list(cli_mod.sys.argv))
+
+    monkeypatch.setattr(cli_mod, "app", capture_app)
+    monkeypatch.setattr(cli_mod.sys, "argv", ["ocean", "--version"])
+    cli_mod.entrypoint()
+    assert cli_mod.sys.argv == ["ocean", "--version"]
+    assert recorded == [["ocean", "--version"]]
 
 
 def test_ask_non_tty_skips_rich_prompt_outside_pytest(monkeypatch):

@@ -1,0 +1,17 @@
+command:
+  - "${PYTHON}"
+  - "-m"
+  - "ocean"
+  - "chat-repl"
+env:
+  OCEAN_TEST: "1"
+  TERM: dumb
+  COLUMNS: "120"
+  LINES: "40"
+steps:
+  - expect: "(?i)ocean\\s*>"
+    send: "crew"
+    timeout_s: 55
+  - expect: "Skill discovery"
+    send: "exit"
+    timeout_s: 25

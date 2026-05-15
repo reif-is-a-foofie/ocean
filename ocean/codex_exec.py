@@ -32,8 +32,15 @@ def _coerce_token_count(raw: object) -> int:
         if isinstance(raw, dict):
             if "total_tokens" in raw:
                 return max(0, int(raw["total_tokens"]))
-            tin = int(raw.get("prompt_tokens") or raw.get("input_tokens") or 0)
-            tout = int(raw.get("completion_tokens") or raw.get("output_tokens") or 0)
+            if "totalTokenCount" in raw:
+                return max(0, int(raw["totalTokenCount"]))
+            tin = int(raw.get("prompt_tokens") or raw.get("input_tokens") or raw.get("promptTokenCount") or 0)
+            tout = int(
+                raw.get("completion_tokens")
+                or raw.get("output_tokens")
+                or raw.get("candidatesTokenCount")
+                or 0
+            )
             return max(0, tin + tout)
     except (TypeError, ValueError):
         return 0
@@ -194,6 +201,198 @@ def _ensure_token_env() -> None:
             continue
 
 
+_CODEGEN_SYSTEM = (
+    "You are a code generation tool. Return ONLY JSON. No markdown. No commentary. "
+    "Output a JSON object mapping relative file paths to full file contents. "
+    "Paths must be strings; contents must be strings."
+)
+
+
+def compose_codegen_full_prompt(
+    instruction: str,
+    suggested_files: Optional[list[str]] = None,
+    context_file: Optional[Path] = None,
+) -> str:
+    """Build the user-facing codegen prompt (shared by Codex, OpenAI, and Gemini)."""
+    prompt_parts: list[str] = []
+    if context_file and context_file.exists():
+        try:
+            ctx = context_file.read_text(encoding="utf-8")
+            prompt_parts.append("Context begins:\n" + ctx + "\nContext ends.")
+        except Exception:
+            pass
+    prompt_parts.append(_CODEGEN_SYSTEM)
+    if suggested_files:
+        prompt_parts.append("Suggested files: " + ", ".join(suggested_files))
+    prompt_parts.append("Instruction: " + instruction)
+    return "\n\n".join(prompt_parts)
+
+
+def normalize_codegen_mapping(obj: dict) -> Optional[Dict[str, str]]:
+    """Interpret common JSON shapes from model output into path->content."""
+    if all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):
+        try:
+            _feed(f"🌊 Ocean: Codex exec OK (files={len(obj)})")
+        except Exception:
+            pass
+        return obj  # type: ignore[return-value]
+    files = obj.get("files") if isinstance(obj.get("files"), dict) else None  # type: ignore[assignment]
+    if isinstance(files, dict):
+        out = {str(k): str(v) for k, v in files.items()}
+        if out:
+            try:
+                _feed(f"🌊 Ocean: Codex exec OK (files={len(out)})")
+            except Exception:
+                pass
+            return out
+    content = obj.get("content")
+    if isinstance(content, list):
+        out2: Dict[str, str] = {}
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "json" and isinstance(item.get("data"), dict):
+                for k, v in item["data"].items():
+                    out2[str(k)] = str(v)
+        if out2:
+            try:
+                _feed(f"🌊 Ocean: Codex exec OK (files={len(out2)})")
+            except Exception:
+                pass
+            return out2
+    return None
+
+
+def _openai_api_codegen(full_prompt: str, timeout: int) -> Optional[Dict[str, str]]:
+    """Call OpenAI Chat Completions and return a path->content mapping."""
+    global _last_error_detail
+    key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not key:
+        return None
+    try:
+        _feed("🌊 Ocean: Using OpenAI API for codegen.")
+    except Exception:
+        pass
+    from .backends import get_openai_model
+
+    api_model = get_openai_model()
+    if api_model.startswith("o4"):
+        api_model = "gpt-4o-mini"
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a code generation tool. Return ONLY JSON: a mapping of file paths to full file contents.",
+        },
+        {"role": "user", "content": full_prompt},
+    ]
+    body = {"model": api_model, "messages": messages, "temperature": 0}
+    try:
+        resp = httpx.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body, timeout=timeout)
+        data = resp.json()
+        _note_token_ledger(data.get("usage"))
+        content = (((data.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
+        try:
+            obj = json.loads(content)
+        except Exception:
+            obj = _extract_json(content)
+        if not isinstance(obj, dict):
+            try:
+                _feed("🌊 Ocean: OpenAI API returned no JSON mapping.")
+            except Exception:
+                pass
+            _last_error_detail = "OpenAI API returned no JSON mapping"
+            return None
+        return normalize_codegen_mapping(obj)
+    except Exception as e:
+        try:
+            _feed(f"🌊 Ocean: OpenAI API codegen error: {e}")
+        except Exception:
+            pass
+        _last_error_detail = f"OpenAI API codegen error: {e}"
+        return None
+
+
+def _gemini_api_key() -> str:
+    return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+
+
+def _gemini_api_codegen(full_prompt: str, timeout: int) -> Optional[Dict[str, str]]:
+    """Call Google Gemini generateContent and return a path->content mapping."""
+    global _last_error_detail
+    key = _gemini_api_key()
+    if not key:
+        return None
+    try:
+        _feed("🌊 Ocean: Using Google Gemini API for codegen.")
+    except Exception:
+        pass
+    from .backends import get_gemini_model
+
+    model = get_gemini_model().strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    headers = {"Content-Type": "application/json", "x-goog-api-key": key}
+    sys_text = (
+        "You are a code generation tool. Return ONLY JSON: a mapping of relative file paths "
+        "to full file contents. No markdown fences, no commentary."
+    )
+    body: dict = {
+        "systemInstruction": {"parts": [{"text": sys_text}]},
+        "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
+        "generationConfig": {"temperature": 0},
+    }
+    if os.getenv("OCEAN_GEMINI_JSON_MODE", "1") not in ("0", "false", "False"):
+        body["generationConfig"]["responseMimeType"] = "application/json"
+    try:
+        resp = httpx.post(url, headers=headers, json=body, timeout=timeout)
+        data = resp.json()
+        if resp.status_code >= 400:
+            err = data.get("error") if isinstance(data.get("error"), dict) else {}
+            msg = (err.get("message") if isinstance(err, dict) else None) or str(data)[:200]
+            try:
+                _feed(f"🌊 Ocean: Gemini API HTTP {resp.status_code}: {msg}")
+            except Exception:
+                pass
+            _last_error_detail = f"Gemini API HTTP {resp.status_code}"
+            return None
+        _note_token_ledger(data.get("usageMetadata"))
+        cands = data.get("candidates") or []
+        text = ""
+        if cands and isinstance(cands[0], dict):
+            parts = ((cands[0].get("content") or {}).get("parts")) or []
+            if isinstance(parts, list):
+                for p in parts:
+                    if isinstance(p, dict) and p.get("text"):
+                        text += str(p["text"])
+        if not text.strip():
+            try:
+                _feed("🌊 Ocean: Gemini API returned empty content.")
+            except Exception:
+                pass
+            _last_error_detail = "Gemini API returned empty content"
+            return None
+        try:
+            obj = json.loads(text)
+        except Exception:
+            obj = _extract_json(text)
+        if not isinstance(obj, dict):
+            try:
+                _feed("🌊 Ocean: Gemini API returned no JSON mapping.")
+            except Exception:
+                pass
+            _last_error_detail = "Gemini API returned no JSON mapping"
+            return None
+        return normalize_codegen_mapping(obj)
+    except Exception as e:
+        try:
+            _feed(f"🌊 Ocean: Gemini API codegen error: {e}")
+        except Exception:
+            pass
+        _last_error_detail = f"Gemini API codegen error: {e}"
+        return None
+
+
 def _extract_json(stdout: str) -> Optional[dict]:
     # Try to find the first balanced JSON object in output
     # Heuristic: find first '{' and last '}' and attempt to parse progressively
@@ -267,6 +466,17 @@ def generate_files(
         _ensure_token_env()
     except Exception:
         pass
+
+    full_prompt = compose_codegen_full_prompt(instruction, suggested_files, context_file)
+
+    prefer_api_early = os.getenv("OCEAN_PREFER_OPENAI_API") in ("1", "true", "True") and bool(
+        (os.getenv("OPENAI_API_KEY") or "").strip()
+    )
+    global _last_mode
+    if prefer_api_early:
+        _last_mode = "api_fallback"
+        return _openai_api_codegen(full_prompt, timeout)
+
     if not available():
         if force:
             raise CodexUnavailable("Codex CLI not available")
@@ -275,28 +485,6 @@ def generate_files(
         except Exception:
             pass
         return None
-
-    prompt_parts: list[str] = []
-    if context_file and context_file.exists():
-        try:
-            ctx = context_file.read_text(encoding="utf-8")
-            prompt_parts.append("Context begins:\n" + ctx + "\nContext ends.")
-        except Exception:
-            pass
-
-    prompt_parts.append(
-        (
-            "You are a code generation tool. "
-            "Return ONLY JSON. No markdown. No commentary. "
-            "Output a JSON object mapping relative file paths to full file contents. "
-            "Paths must be strings; contents must be strings."
-        )
-    )
-    if suggested_files:
-        prompt_parts.append("Suggested files: " + ", ".join(suggested_files))
-
-    prompt_parts.append("Instruction: " + instruction)
-    full_prompt = "\n\n".join(prompt_parts)
 
     # Build minimal, compatible codex exec command with advanced controls.
     # Do NOT pass --model; let Codex decide its default model.
@@ -346,11 +534,7 @@ def generate_files(
         env["OCEAN_AGENT"] = agent
         # Provide a hint label for Codex if supported (harmless otherwise)
         env.setdefault("CODEX_RUN_LABEL", f"ocean:{agent}")
-    prefer_api = os.getenv("OCEAN_PREFER_OPENAI_API") in ("1", "true", "True") and bool(env.get("OPENAI_API_KEY"))
-    global _last_mode
-    if prefer_api:
-        _last_mode = "api_fallback"
-    elif _logged_in_via_codex():
+    if _logged_in_via_codex():
         # Ensure API key does not override subscription auth
         env.pop("OPENAI_API_KEY", None)
         # Ensure subscription token is exported to child processes if available
@@ -618,11 +802,9 @@ def generate_files(
                         except Exception:
                             obj2 = _extract_json(out2)
                         if isinstance(obj2, dict):
-                            try:
-                                _feed(f"🌊 Ocean: Codex exec OK (files={len(obj2)})")
-                            except Exception:
-                                pass
-                            return obj2  # type: ignore[return-value]
+                            mapped = normalize_codegen_mapping(obj2)
+                            if mapped:
+                                return mapped
                         # fallthrough to detailed logs
                         stdout = out2
                         stderr = err2
@@ -655,88 +837,14 @@ def generate_files(
 
     # If we are in API fallback, call OpenAI API directly using httpx
     if _last_mode == "api_fallback" and env.get("OPENAI_API_KEY"):
-        try:
-            _feed("🌊 Ocean: Using OpenAI API fallback for codegen.")
-        except Exception:
-            pass
-        api_model = os.getenv("OCEAN_OPENAI_MODEL") or os.getenv("OCEAN_CODEX_MODEL", "gpt-4o-mini")
-        # Map common Codex shorthands to OpenAI models
-        if api_model.startswith("o4"):
-            api_model = "gpt-4o-mini"
-        headers = {
-            "Authorization": f"Bearer {env['OPENAI_API_KEY']}",
-            "Content-Type": "application/json",
-        }
-        messages = [
-            {"role": "system", "content": "You are a code generation tool. Return ONLY JSON: a mapping of file paths to full file contents."},
-            {"role": "user", "content": full_prompt},
-        ]
-        body = {"model": api_model, "messages": messages, "temperature": 0}
-        try:
-            resp = httpx.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body, timeout=timeout)
-            data = resp.json()
-            content = (((data.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
-            try:
-                obj = json.loads(content)
-            except Exception:
-                obj = _extract_json(content)
-            if not isinstance(obj, dict):
-                # Emit a head for debugging
-                try:
-                    _feed("🌊 Ocean: API fallback returned no JSON mapping.")
-                except Exception:
-                    pass
-                _last_error_detail = "API fallback returned no JSON mapping"
-                return None
-        except Exception as e:
-            try:
-                _feed(f"🌊 Ocean: OpenAI API fallback error: {e}")
-            except Exception:
-                pass
-            _last_error_detail = f"API fallback error: {e}"
-            return None
-    
-    # By here, obj should be parsed from either CLI or API fallback
+        return _openai_api_codegen(full_prompt, timeout)
+
+    # By here, obj should be parsed from Codex CLI (subscription mode)
     if not isinstance(obj, dict):
         _last_error_detail = "No JSON mapping returned"
         return None
 
-    # Interpret common shapes
-    # 1) direct mapping
-    if all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):
-        try:
-            _feed(f"🌊 Ocean: Codex exec OK (files={len(obj)})")
-        except Exception:
-            pass
-        return obj  # type: ignore[return-value]
-
-    # 2) { files: { path: content } }
-    files = obj.get("files") if isinstance(obj.get("files"), dict) else None  # type: ignore[assignment]
-    if isinstance(files, dict):
-        out = {str(k): str(v) for k, v in files.items()}
-        if out:
-            try:
-                _feed(f"🌊 Ocean: Codex exec OK (files={len(out)})")
-            except Exception:
-                pass
-            return out
-
-    # 3) { content: [ {type: 'json', data: {path: content}} ] }
-    content = obj.get("content")
-    if isinstance(content, list):
-        out: Dict[str, str] = {}
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "json" and isinstance(item.get("data"), dict):
-                for k, v in item["data"].items():
-                    out[str(k)] = str(v)
-        if out:
-            try:
-                _feed(f"🌊 Ocean: Codex exec OK (files={len(out)})")
-            except Exception:
-                pass
-            return out
-
-    return None
+    return normalize_codegen_mapping(obj)
 
 
 def generate_files_with_fallback(
@@ -759,7 +867,27 @@ def generate_files_with_fallback(
         if backend == "dry_plan_only":
             continue
         is_fallback = i > 0
-        if backend == "codex":
+        if backend == "openai_api":
+            if not (os.getenv("OPENAI_API_KEY") or "").strip():
+                _feed("🌊 Ocean: openai_api backend requires OPENAI_API_KEY.")
+                continue
+            _feed(f"🌊 Ocean: {'[fallback] ' if is_fallback else ''}trying OpenAI API…")
+            fp = compose_codegen_full_prompt(instruction, suggested_files, context_file)
+            result = _openai_api_codegen(fp, timeout)
+            if result:
+                return result
+            _feed("🌊 Ocean: OpenAI API returned nothing — trying next agent…")
+        elif backend == "gemini_api":
+            if not _gemini_api_key():
+                _feed("🌊 Ocean: gemini_api backend requires GEMINI_API_KEY or GOOGLE_API_KEY.")
+                continue
+            _feed(f"🌊 Ocean: {'[fallback] ' if is_fallback else ''}trying Gemini API…")
+            fp = compose_codegen_full_prompt(instruction, suggested_files, context_file)
+            result = _gemini_api_codegen(fp, timeout)
+            if result:
+                return result
+            _feed("🌊 Ocean: Gemini API returned nothing — trying next agent…")
+        elif backend == "codex":
             if not available():
                 _feed(f"🌊 Ocean: codex not on PATH — {'falling back' if is_fallback else 'skipping'}")
                 continue

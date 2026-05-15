@@ -5,7 +5,7 @@
 Ocean sits between you and your coding agents (Codex CLI, Claude CLI, Cursor). It runs clarification, planning, delegation, and handoff so delivery stays orchestrated — not ad hoc chat.
 
 ```
-reify@Reifs-MacBook-Pro ~ % ocean chat
+reify@Reifs-MacBook-Pro ~ % ocean
 🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship. [09:30:29]
 🌊 Ocean: Workspace: /Users/reify/Classified/ocean/ocean_reify [09:30:31]
 🌊 Ocean: You drive goals. I run the crew, timing, and token budget.
@@ -36,8 +36,8 @@ The agent does the coding. Ocean handles who gets what, when, and in what order.
 ## Quick start
 
 ```bash
-# Full interactive flow
-ocean chat
+# Full interactive flow (same as `ocean chat`)
+ocean
 
 # Quick REPL
 ocean chat-repl
@@ -70,7 +70,8 @@ ocean> exit
 
 | Command | What it does |
 |---|---|
-| `ocean chat` | Full interactive flow — clarify → crew → plan → build |
+| `ocean` | Full interactive chat — clarify → crew → plan → build (same as `ocean chat`) |
+| `ocean chat` | Same as bare `ocean` (explicit subcommand) |
 | `ocean chat-repl` | Quick REPL with `prd:` / `plan` / `build` / `crew` / `status` |
 | `ocean crew` | Show each agent's skills and voicing |
 | `ocean clarify` | Capture project intent, save `docs/project.json` |

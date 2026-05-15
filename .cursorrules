@@ -4,13 +4,13 @@
 
 Implement OCEAN — a CLI multi‑agent **orchestrator** between the user and coding agents (Codex, MCP, etc.) — as a series of small, verifiable milestones. Cursor should follow these atomic tasks, produce incremental deliverables, and persist all artifacts in the repository.
 
-**Product integration:** Terminal-first experience: bare **`ocean`** opens the **Textual** control shell on a TTY; **`ocean chat`** is the emoji feed with persona voicing in **`docs/personas.yaml`**. **`ocean tui`** is deprecated (points at Textual + chat).
+**Product integration:** Terminal-first experience: bare **`ocean`** runs the **interactive chat** (same as **`ocean chat`**) with persona voicing in **`docs/personas.yaml`**.
 
 ## Global Guardrails
 
-- **Production regression:** From repo root run **`bash scripts/regression.sh`** (full **`pytest tests/`**, **`scripts/mcp_stdio_smoke.py`**, **`ocean --help`** / **`ocean --version`**). Prefer **`./venv/bin/python`** when a venv exists (the script picks it up). Do not treat **`pytest tests/`** alone as the full production bar unless the user explicitly narrows scope.
+- **Production regression:** From repo root run **`bash scripts/regression.sh`** (full **`pytest tests/`**, **`scripts/mcp_stdio_smoke.py`**, **`ocean --help`** / **`ocean --version`**, and a real bare **`./venv/bin/ocean`** subprocess via **`scripts/ocean_chat_real_smoke.sh`**). Prefer **`./venv/bin/python`** when a venv exists (the script picks it up). Do not treat **`pytest tests/`** alone as the full production bar unless the user explicitly narrows scope.
 - **Install / run via npm:** From repo root `npm install` wires the **`ocean`** CLI (`package.json` → `bin/ocean.js`) and runs **`pip install -e .`** in postinstall (skip with `OCEAN_SKIP_PY_INSTALL=1`). To open the orchestrator when the user asks for Ocean: **`npx ocean`** or **`npm start`** from the repo root (after `npm install` if needed).
-- Single entrypoint: `ocean` (no args) runs the **Textual control shell** on an interactive TTY; use **`ocean chat`** for the feed flow, or **`OCEAN_DEFAULT_UI=chat`** to make bare `ocean` use chat. Persona voices + skills ship in **`docs/personas.yaml`** and surface in-chat during crew assembly.
+- Single entrypoint: **`ocean`** (no args) runs the **interactive chat** (same as **`ocean chat`**). Persona voices + skills ship in **`docs/personas.yaml`** and surface in-chat during crew assembly.
 - Cross‑platform: macOS, Linux; Python 3.11+.
 - Keep changes minimal and focused per milestone; no unrelated refactors.
 - Never remove logs or user content; only append.
@@ -22,7 +22,7 @@ Implement OCEAN — a CLI multi‑agent **orchestrator** between the user and co
 
 - Language: Python 3.11+
 - CLI: Typer (preferred) or Click
-- TUI/Output: Rich (optional, nice‑to‑have)
+- TUI/Output: Rich for terminal formatting (optional, nice‑to‑have)
 - Orchestration: simple in‑repo classes; can later swap for CrewAI
 - Backend example: FastAPI (minimal)
 - Frontend example: Vite + React (or plain HTML placeholder)

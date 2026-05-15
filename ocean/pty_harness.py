@@ -16,6 +16,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
@@ -259,6 +260,173 @@ def run_under_pty_scripted(
     raw = b"".join(all_chunks)
     text = raw.decode("utf-8", errors="replace")
     return PtyResult(output=text, exit_code=exit_code, timed_out=timed_out)
+
+
+class PtyScenarioError(RuntimeError):
+    """Raised when a scripted PTY scenario step times out or is misconfigured."""
+
+    def __init__(self, message: str, *, output_plain: str) -> None:
+        super().__init__(message)
+        self.output_plain = output_plain
+
+
+def tail_plain(text: str, *, lines: int = 48) -> str:
+    """Last ``lines`` non-ANSI lines for failure diagnostics."""
+    ls = strip_ansi(text).splitlines()
+    return "\n".join(ls[-lines:])
+
+
+def _expand_placeholders(obj: Any, mapping: dict[str, str]) -> Any:
+    if isinstance(obj, str):
+        out = obj
+        for k, v in mapping.items():
+            out = out.replace(f"${{{k}}}", v)
+        return out
+    if isinstance(obj, list):
+        return [_expand_placeholders(x, mapping) for x in obj]
+    if isinstance(obj, dict):
+        return {str(k): _expand_placeholders(v, mapping) for k, v in obj.items()}
+    return obj
+
+
+def load_pty_scenario_yaml(
+    path: Path | str,
+    *,
+    placeholders: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Load a YAML scenario: ``command``, optional ``env``, ``steps`` list."""
+    try:
+        import yaml  # type: ignore
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError("PyYAML is required for YAML PTY scenarios") from e
+    p = Path(path)
+    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise PtyScenarioError(f"scenario root must be a mapping: {p}", output_plain="")
+    ph = {"PYTHON": sys.executable, **(placeholders or {})}
+    return _expand_placeholders(raw, ph)  # type: ignore[return-value]
+
+
+def run_under_pty_scenario(
+    scenario: dict[str, Any],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    total_timeout_s: float = 120.0,
+    terminate_child: bool = True,
+) -> PtyResult:
+    """Run ``scenario['command']`` under PTY; each step waits for ``expect`` then ``send``s."""
+    cmd = scenario.get("command")
+    if not isinstance(cmd, list) or not cmd or not all(isinstance(x, str) for x in cmd):
+        raise PtyScenarioError("scenario['command'] must be a non-empty list of strings", output_plain="")
+    steps_raw = scenario.get("steps") or []
+    if not isinstance(steps_raw, list) or not steps_raw:
+        raise PtyScenarioError("scenario['steps'] must be a non-empty list", output_plain="")
+
+    cwd = Path(cwd or Path.cwd()).resolve()
+    child_env = {**os.environ, **(env or {})}
+    scen_env = scenario.get("env") or {}
+    if isinstance(scen_env, dict):
+        for k, v in scen_env.items():
+            child_env[str(k)] = str(v)
+
+    deadline = time.monotonic() + total_timeout_s
+    all_chunks: list[bytes] = []
+
+    pid, master_fd = pty.fork()
+    if pid == 0:
+        try:
+            os.chdir(cwd)
+            os.execvpe(cmd[0], cmd, child_env)
+        except Exception:
+            os._exit(127)
+        os._exit(127)
+
+    exit_code: int | None = None
+    timed_out = False
+    try:
+        for i, step in enumerate(steps_raw):
+            if not isinstance(step, dict):
+                raise PtyScenarioError(f"step {i} must be a mapping", output_plain=strip_ansi(b"".join(all_chunks).decode("utf-8", errors="replace")))
+            send_text = step.get("send")
+            if not isinstance(send_text, str):
+                raise PtyScenarioError(f"step {i} missing string 'send'", output_plain=tail_plain(b"".join(all_chunks).decode("utf-8", errors="replace")))
+            expect_any = step.get("expect_any")
+            expect_re = step.get("expect")
+            pat: re.Pattern[str] | None
+            if expect_any is not None:
+                if not isinstance(expect_any, list) or not expect_any:
+                    raise PtyScenarioError(f"step {i} expect_any must be non-empty list", output_plain="")
+                combined = "|".join(f"(?:{x})" for x in expect_any if isinstance(x, str))
+                pat = re.compile(combined)
+            elif expect_re is None:
+                pat = None
+            elif isinstance(expect_re, str):
+                pat = re.compile(expect_re)
+            else:
+                raise PtyScenarioError(f"step {i} expect must be string or null", output_plain="")
+
+            step_timeout = float(step["timeout_s"]) if step.get("timeout_s") is not None else min(60.0, max(5.0, deadline - time.monotonic()))
+            remain = max(0.1, deadline - time.monotonic())
+            step_deadline = min(step_timeout, remain)
+            chunk, step_to = _wait_for_regex(master_fd, pattern=pat, deadline_s=step_deadline)
+            all_chunks.append(chunk)
+            if step_to:
+                timed_out = True
+                plain = strip_ansi(b"".join(all_chunks).decode("utf-8", errors="replace"))
+                detail = tail_plain(plain)
+                raise PtyScenarioError(
+                    f"step {i} timed out waiting for {expect_re!r} / expect_any={expect_any!r}\n--- tail ---\n{detail}",
+                    output_plain=plain,
+                )
+            payload = send_text if send_text.endswith("\n") else (send_text + "\n")
+            os.write(master_fd, payload.encode("utf-8"))
+        remain = max(0.1, deadline - time.monotonic())
+        tail, _ = read_until(master_fd, deadline_s=min(remain, 4.0), idle_after_data_s=0.45)
+        all_chunks.append(tail)
+    finally:
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+        if terminate_child:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                _pid, st = os.waitpid(pid, 0)
+                exit_code = os.WEXITSTATUS(st) if os.WIFEXITED(st) else None
+            except ChildProcessError:
+                pass
+            except ProcessLookupError:
+                pass
+        else:
+            try:
+                _pid, st = os.waitpid(pid, 0)
+                exit_code = os.WEXITSTATUS(st) if os.WIFEXITED(st) else None
+            except ChildProcessError:
+                pass
+
+    raw = b"".join(all_chunks)
+    text = raw.decode("utf-8", errors="replace")
+    return PtyResult(output=text, exit_code=exit_code, timed_out=timed_out)
+
+
+def run_under_pty_scenario_file(
+    scenario_path: Path | str,
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    total_timeout_s: float = 120.0,
+    terminate_child: bool = True,
+    placeholders: dict[str, str] | None = None,
+) -> PtyResult:
+    scenario = load_pty_scenario_yaml(scenario_path, placeholders=placeholders)
+    return run_under_pty_scenario(
+        scenario,
+        cwd=cwd,
+        env=env,
+        total_timeout_s=total_timeout_s,
+        terminate_child=terminate_child,
+    )
 
 
 def _main() -> None:
