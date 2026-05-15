@@ -81,8 +81,8 @@ def _openai_brain(*, cwd: Path, timeout: float) -> str | None:
     return str((((data.get("choices") or [{}])[0]).get("message") or {}).get("content") or "").strip() or None
 
 
-def _gemini_brain(*, cwd: Path, timeout: float) -> str | None:
-    key = _gemini_key()
+def _gemini_brain(*, cwd: Path, timeout: float, api_key: str | None = None) -> str | None:
+    key = (api_key or "").strip() or _gemini_key()
     if not key:
         return None
     model = get_gemini_model(cwd).strip()
@@ -125,8 +125,14 @@ def fetch_early_loop_brain_text(*, cwd: Path | None = None, timeout: float = 22.
     try:
         if backend == "openai_api" and _openai_key():
             return _openai_brain(cwd=root, timeout=timeout)
-        if backend == "gemini_api" and _gemini_key():
-            return _gemini_brain(cwd=root, timeout=timeout)
+        from . import setup_gemini as _sg
+
+        gkey, src = _sg.resolve_gemini_key_for_early_brain()
+        if gkey:
+            out = _gemini_brain(cwd=root, timeout=timeout, api_key=gkey)
+            if out and src == "embedded":
+                _sg.record_embedded_gemini_use()
+            return out
     except Exception:
         return None
     return None
