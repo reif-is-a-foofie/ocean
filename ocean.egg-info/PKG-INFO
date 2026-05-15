@@ -5,14 +5,15 @@ Summary: OCEAN CLI/TUI multi-agent orchestrator
 Author: OCEAN Team
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+Requires-Dist: pyyaml>=6.0.1
 Requires-Dist: typer[all]>=0.9.0
 Requires-Dist: rich>=15.0.0
+Requires-Dist: textual>=0.61.0
 Requires-Dist: prompt_toolkit>=3.0.47
 Requires-Dist: fastapi>=0.111.0
 Requires-Dist: uvicorn>=0.30.0
 Requires-Dist: pytest>=8.2.0
 Requires-Dist: httpx>=0.28.0
-Requires-Dist: batrachian-toad>=0.6.16; python_version >= "3.14"
 
 # 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator
 
@@ -104,31 +105,25 @@ OCEAN is a **terminal-based orchestrator** — your **interface to coding agents
 
 Ocean still has a terminal-first CLI, but it also ships a React control room for direct chat, file inspection, feedback capture, and job handoff.
 
-## 🐸 Toad fork + Ocean
+## ⌨️ Terminal chat (emoji feed)
 
-The **product shell** is a **fork of [Toad](https://github.com/batrachianai/toad)** — the rich terminal UI for coding agents. **This repo stays Ocean**: the orchestrator you **`ocean`** into from that fork (typically subprocess). Clarification, crew, backlog/plan, delegation to Codex/MCP, and session logs stay here; Toad owns picking agents, markdown UX, pickers, and shell ergonomics. Toad is **AGPL**; comply when distributing a combined stack.
+**`ocean chat`** is the main experience: timestamped lines, crew emoji (`ocean/personas.py` + `docs/personas.yaml`), and **voice + skills** printed when the crew assembles. Edit **`docs/personas.yaml`** to tune how each agent sounds and what they’re allowed to “major” in.
+
+**`ocean chat-repl`** adds quick commands; type **`crew`** (aka `voices` / `skills`) to dump the same cards.
 
 ### First-run onboarding
 
 When you eventually run **`ocean chat`** (feed style), it orders: **welcome → codegen backend → credentials → crew intro → Moroni clarify (project) → plan**. Structured lines are appended to **`logs/events-*.jsonl`** when **`OCEAN_EVENTS_FILE`** is set (done automatically each session).
 
-- **TTY / secrets:** **`OCEAN_SKIP_OPENAI_KEY_PROMPT=1`** skips the interactive `OPENAI_API_KEY` capture for `openai_api`. **`OCEAN_SKIP_BACKEND_PROMPT=1`** keeps the default Codex backend without prompting when stdin is non-interactive — or set **`OCEAN_CODEGEN_BACKEND`** / call MCP **`ocean_set_codegen_backend`** from the host shell (Toad).
-
-Contract for TUI hosts is documented in [**docs/toad_first_run.md**](docs/toad_first_run.md).
+- **TTY / secrets:** **`OCEAN_SKIP_OPENAI_KEY_PROMPT=1`** skips the interactive `OPENAI_API_KEY` capture for `openai_api`. **`OCEAN_SKIP_BACKEND_PROMPT=1`** keeps the default Codex backend without prompting when stdin is non-interactive — or set **`OCEAN_CODEGEN_BACKEND`** / call MCP **`ocean_set_codegen_backend`** from the host shell.
 
 ### Default terminal (bare `ocean`)
 
-In a **TTY**, bare **`ocean`** **`exec`s Toad** when `toad` is available. If it isn’t, Ocean **tries to install** it (in order): **`pip install batrachian-toad`** into the current Python environment, then **`uv tool install`** if `uv` is on your PATH, then the **upstream** **`curl -fsSL https://batrachian.ai/install | sh`** (macOS / Linux). Set **`OCEAN_AUTO_INSTALL_TOAD=0`** to skip that and fall straight to **`ocean chat`**.
+Bare **`ocean`** opens the **Textual** shell on an interactive TTY (use **`OCEAN_DEFAULT_UI=chat`** for the feed-style default). Use **`ocean chat`** for the emoji feed, and **`ocean chat-repl`** with the **`crew`** command to re-print voicing + skills.
 
-Use **`OCEAN_DEFAULT_UI=chat`**, **`OCEAN_SKIP_TOAD=1`**, or a **non-TTY** for scripts and CI (feed only).
+**`ocean tui`** prints a short pointer to **`ocean`** / **`ocean chat`**.
 
-**`ocean tui`:** same as launching Toad explicitly (still requires a TTY).
-
-### Where is the Toad UI?
-
-**Toad** is the default terminal experience for bare **`ocean`** when it’s installed — see [upstream](https://github.com/batrachianai/toad) or **`batrachian-toad`** on PyPI (Python 3.14+).
-
-**`ocean codex-chat`** remains a **Prompt Toolkit** helper — not Toad.
+**`ocean codex-chat`** is a **Prompt Toolkit** + Codex helper (separate from the Textual shell).
 
 ### Codegen backend preference
 
@@ -148,7 +143,8 @@ Lines prefixed **Ocean Doctor (preflight)** at startup are **environment checks*
 |---------|-------------|
 | `npm install` | **Primary install** — Node deps + `bin/ocean`; postinstall runs `pip install -e .` |
 | `npx ocean` / `npm start` | Run CLI without global install (use when Cursor asks to open Ocean) |
-| `ocean` | **TTY:** install Toad if needed, then **`exec` Toad** · **non-TTY / skip:** **`chat`** |
+| `ocean` | **Textual shell** (default on TTY) · **`ocean chat`** for feed · **`OCEAN_DEFAULT_UI=chat`** uses chat as default |
+| `ocean tui` | Deprecated pointer to Textual + chat |
 | `ocean onboard` | **First-run setup** — `venv`, `pip install -e .`, `pytest`, then `doctor` |
 | `ocean init --setup` | Same dev setup as `onboard` (then exits; no scaffold deprecation path) |
 | `ocean clarify` | Project clarification with Moroni (Architect) |
@@ -205,7 +201,7 @@ The MCP server exposes:
 - `ocean_record_feedback` — turn reactions into durable doctrine and tasks.
 - `ocean_bootstrap_doctrine` — create missing doctrine files without overwriting existing files.
 - `ocean_health` — environment snapshot incl. **`valid_codegen_backends`** and recovery hints (useful for onboarding pickers).
-- `ocean_set_codegen_backend` — write **`docs/ocean_prefs.json`** from a non-interactive host (e.g. Toad subprocess without a backend prompt).
+- `ocean_set_codegen_backend` — write **`docs/ocean_prefs.json`** from a non-interactive host (no backend prompt).
 
 Each turn, Ocean pulls bounded build context from the target repo, including git state, detected stack, key docs/manifests, test report, backlog, and file tree. It sends that context to the available reasoning brain, asks for strict JSON, parses the result, and returns `advisor_recommendation` plus coding-agent instructions.
 

@@ -13,7 +13,9 @@
   "constraints": [
     "minimal dependencies"
   ],
-  "createdAt": "2026-05-11T12:43:39.107181"
+  "vision": "## Summary",
+  "ai_identity": "Your coding partner on **🌊 OCEAN - Multi-Agent Software Engineering Orchestrator** — Ocean runs the crew and timing; you steer goals and say when we're done.",
+  "createdAt": "2026-05-12T10:15:46.528184"
 }
 
 
@@ -84,7 +86,7 @@
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8001/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8004/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   },
@@ -197,6 +199,8 @@
 .git/packed-refs
 
 .github/workflows/ci.yml
+
+.github/workflows/personas-daily.yml
 
 .gitignore
 
@@ -332,7 +336,7 @@ docs/search_context.md
 
 docs/test_report.md
 
-docs/toad_first_run.md
+docs/textual_tmux_pilot_scenarios.md
 
 game.py
 
@@ -340,15 +344,85 @@ install-global.sh
 
 logs/codex-edna-20260511-093117.log
 
+logs/codex-edna-20260512-100816.log
+
+logs/codex-edna-20260512-100856.log
+
+logs/codex-edna-20260512-101014.log
+
+logs/codex-last-edna-20260512-100816.txt
+
+logs/codex-last-edna-20260512-100856.txt
+
+logs/codex-last-edna-20260512-101014.txt
+
+logs/codex-last-mario-20260512-101240.txt
+
+logs/codex-last-mario-20260512-101307.txt
+
+logs/codex-last-mario-20260512-101330.txt
+
+logs/codex-last-mario-20260512-101415.txt
+
+logs/codex-last-mario-20260512-101435.txt
+
+logs/codex-last-mario-20260512-101457.txt
+
+logs/codex-last-mario-20260512-101617.txt
+
+logs/codex-last-mario-20260512-101637.txt
+
+logs/codex-last-moroni-20260512-100637.txt
+
+logs/codex-last-moroni-20260512-100711.txt
+
+logs/codex-last-moroni-20260512-100830.txt
+
+logs/codex-last-q-20260512-100759.txt
+
+logs/codex-last-q-20260512-100840.txt
+
+logs/codex-last-q-20260512-100958.txt
+
 logs/codex-mario-20260511-093213.log
 
 logs/codex-mario-20260511-093306.log
 
 logs/codex-mario-20260511-093410.log
 
+logs/codex-mario-20260512-101240.log
+
+logs/codex-mario-20260512-101307.log
+
+logs/codex-mario-20260512-101330.log
+
+logs/codex-mario-20260512-101415.log
+
+logs/codex-mario-20260512-101435.log
+
+logs/codex-mario-20260512-101457.log
+
+logs/codex-mario-20260512-101617.log
+
+logs/codex-mario-20260512-101637.log
+
 logs/codex-moroni-20260511-092924.log
 
+logs/codex-moroni-20260512-100637.log
+
+logs/codex-moroni-20260512-100711.log
+
+logs/codex-moroni-20260512-100830.log
+
 logs/codex-q-20260511-093023.log
+
+logs/codex-q-20260512-100759.log
+
+logs/codex-q-20260512-100840.log
+
+logs/codex-q-20260512-100958.log
+
+logs/codex-test-last.txt
 
 logs/events-20250905-102830.jsonl
 
@@ -1182,6 +1256,140 @@ logs/events-20260511-124339.jsonl
 
 logs/events-20260511-124513.jsonl
 
+logs/events-20260511-124747.jsonl
+
+logs/events-20260511-125038.jsonl
+
+logs/events-20260511-125039.jsonl
+
+logs/events-20260511-130148.jsonl
+
+logs/events-20260511-130345.jsonl
+
+logs/events-20260511-130346.jsonl
+
+logs/events-20260511-135548.jsonl
+
+logs/events-20260511-135549.jsonl
+
+logs/events-20260511-140309.jsonl
+
+logs/events-20260511-140311.jsonl
+
+logs/events-20260511-142819.jsonl
+
+logs/events-20260511-142820.jsonl
+
+logs/events-20260511-143139.jsonl
+
+logs/events-20260511-143140.jsonl
+
+logs/events-20260511-143542.jsonl
+
+logs/events-20260511-143543.jsonl
+
+logs/events-20260511-144233.jsonl
+
+logs/events-20260511-144234.jsonl
+
+logs/events-20260511-145219.jsonl
+
+logs/events-20260511-145220.jsonl
+
+logs/events-20260511-145221.jsonl
+
+logs/events-20260511-145349.jsonl
+
+logs/events-20260511-145350.jsonl
+
+logs/events-20260511-150708.jsonl
+
+logs/events-20260511-151046.jsonl
+
+logs/events-20260511-151047.jsonl
+
+logs/events-20260511-151118.jsonl
+
+logs/events-20260511-151119.jsonl
+
+logs/events-20260511-152018.jsonl
+
+logs/events-20260511-152109.jsonl
+
+logs/events-20260511-214141.jsonl
+
+logs/events-20260511-214147.jsonl
+
+logs/events-20260511-214148.jsonl
+
+logs/events-20260511-214158.jsonl
+
+logs/events-20260511-214207.jsonl
+
+logs/events-20260511-214209.jsonl
+
+logs/events-20260511-214214.jsonl
+
+logs/events-20260511-214216.jsonl
+
+logs/events-20260511-222821.jsonl
+
+logs/events-20260511-222822.jsonl
+
+logs/events-20260512-091250.jsonl
+
+logs/events-20260512-091251.jsonl
+
+logs/events-20260512-091308.jsonl
+
+logs/events-20260512-091309.jsonl
+
+logs/events-20260512-093545.jsonl
+
+logs/events-20260512-093550.jsonl
+
+logs/events-20260512-093552.jsonl
+
+logs/events-20260512-093927.jsonl
+
+logs/events-20260512-093928.jsonl
+
+logs/events-20260512-100158.jsonl
+
+logs/events-20260512-100159.jsonl
+
+logs/events-20260512-100301.jsonl
+
+logs/events-20260512-100303.jsonl
+
+logs/events-20260512-100615.jsonl
+
+logs/events-20260512-100654.jsonl
+
+logs/events-20260512-100745.jsonl
+
+logs/events-20260512-100808.jsonl
+
+logs/events-20260512-100846.jsonl
+
+logs/events-20260512-100847.jsonl
+
+logs/events-20260512-101413.jsonl
+
+logs/events-20260512-101415.jsonl
+
+logs/events-20260512-101428.jsonl
+
+logs/events-20260512-101429.jsonl
+
+logs/events-20260512-101524.jsonl
+
+logs/events-20260512-101527.jsonl
+
+logs/events-20260512-101542.jsonl
+
+logs/events-20260512-101546.jsonl
+
 logs/mcp-edna.log
 
 logs/mcp-mario.log
@@ -1191,6 +1399,8 @@ logs/mcp-moroni.log
 logs/mcp-q.log
 
 logs/mcp-tony.log
+
+logs/ocean-loop-detached.log
 
 logs/root-venv-install.log
 
@@ -1322,6 +1532,12 @@ logs/runtime-backend-20260511-122029.log
 
 logs/runtime-backend-20260511-122120.log
 
+logs/runtime-backend-20260511-214205.log
+
+logs/runtime-backend-20260512-101411.log
+
+logs/runtime-backend-20260512-101521.log
+
 logs/runtime-ui-20260510-212146.log
 
 logs/runtime-ui-20260510-212156.log
@@ -1449,6 +1665,12 @@ logs/runtime-ui-20260511-093458.log
 logs/runtime-ui-20260511-122029.log
 
 logs/runtime-ui-20260511-122120.log
+
+logs/runtime-ui-20260511-214205.log
+
+logs/runtime-ui-20260512-101411.log
+
+logs/runtime-ui-20260512-101521.log
 
 logs/session-20250902-140754.log
 
@@ -1675,6 +1897,138 @@ logs/session-20260511-124121.log
 logs/session-20260511-124338.log
 
 logs/session-20260511-124339.log
+
+logs/session-20260511-125038.log
+
+logs/session-20260511-125039.log
+
+logs/session-20260511-130148.log
+
+logs/session-20260511-130345.log
+
+logs/session-20260511-130346.log
+
+logs/session-20260511-135548.log
+
+logs/session-20260511-135549.log
+
+logs/session-20260511-140309.log
+
+logs/session-20260511-140311.log
+
+logs/session-20260511-142819.log
+
+logs/session-20260511-142820.log
+
+logs/session-20260511-143139.log
+
+logs/session-20260511-143140.log
+
+logs/session-20260511-143542.log
+
+logs/session-20260511-143543.log
+
+logs/session-20260511-144233.log
+
+logs/session-20260511-144234.log
+
+logs/session-20260511-145219.log
+
+logs/session-20260511-145220.log
+
+logs/session-20260511-145221.log
+
+logs/session-20260511-145349.log
+
+logs/session-20260511-145350.log
+
+logs/session-20260511-150708.log
+
+logs/session-20260511-151046.log
+
+logs/session-20260511-151047.log
+
+logs/session-20260511-151118.log
+
+logs/session-20260511-151119.log
+
+logs/session-20260511-152018.log
+
+logs/session-20260511-152109.log
+
+logs/session-20260511-214141.log
+
+logs/session-20260511-214147.log
+
+logs/session-20260511-214148.log
+
+logs/session-20260511-214158.log
+
+logs/session-20260511-214207.log
+
+logs/session-20260511-214209.log
+
+logs/session-20260511-214214.log
+
+logs/session-20260511-214216.log
+
+logs/session-20260511-222821.log
+
+logs/session-20260511-222822.log
+
+logs/session-20260512-091250.log
+
+logs/session-20260512-091251.log
+
+logs/session-20260512-091308.log
+
+logs/session-20260512-091309.log
+
+logs/session-20260512-093545.log
+
+logs/session-20260512-093550.log
+
+logs/session-20260512-093552.log
+
+logs/session-20260512-093927.log
+
+logs/session-20260512-093928.log
+
+logs/session-20260512-100158.log
+
+logs/session-20260512-100159.log
+
+logs/session-20260512-100301.log
+
+logs/session-20260512-100303.log
+
+logs/session-20260512-100615.log
+
+logs/session-20260512-100654.log
+
+logs/session-20260512-100745.log
+
+logs/session-20260512-100808.log
+
+logs/session-20260512-100846.log
+
+logs/session-20260512-100847.log
+
+logs/session-20260512-101413.log
+
+logs/session-20260512-101415.log
+
+logs/session-20260512-101428.log
+
+logs/session-20260512-101429.log
+
+logs/session-20260512-101524.log
+
+logs/session-20260512-101527.log
+
+logs/session-20260512-101542.log
+
+logs/session-20260512-101546.log
 
 main.py
 
@@ -2300,6 +2654,8 @@ ocean/__pycache__/feed.cpython-311.pyc
 
 ocean/__pycache__/jobs.cpython-311.pyc
 
+ocean/__pycache__/launcher.cpython-311.pyc
+
 ocean/__pycache__/mcp.cpython-311.pyc
 
 ocean/__pycache__/mcp_client.cpython-311.pyc
@@ -2322,9 +2678,13 @@ ocean/__pycache__/product_chat.cpython-311.pyc
 
 ocean/__pycache__/product_loop.cpython-311.pyc
 
+ocean/__pycache__/pty_harness.cpython-311.pyc
+
 ocean/__pycache__/requirements.cpython-311.pyc
 
 ocean/__pycache__/setup_flow.cpython-311.pyc
+
+ocean/__pycache__/token_budget.cpython-311.pyc
 
 ocean/__pycache__/tui_fallback.cpython-311.pyc
 
@@ -2348,6 +2708,22 @@ ocean/codex_wrap.py
 
 ocean/context.py
 
+ocean/core/__init__.py
+
+ocean/core/agents.py
+
+ocean/core/events.py
+
+ocean/core/onboarding.py
+
+ocean/core/orchestrator.py
+
+ocean/core/project_spec.py
+
+ocean/core/state.py
+
+ocean/core/tasks.py
+
 ocean/crewai_adapter.py
 
 ocean/dotenv_merge.py
@@ -2357,6 +2733,8 @@ ocean/events_emit.py
 ocean/feed.py
 
 ocean/jobs.py
+
+ocean/launcher.py
 
 ocean/mcp.py
 
@@ -2376,6 +2754,8 @@ ocean/product_chat.py
 
 ocean/product_loop.py
 
+ocean/pty_harness.py
+
 ocean/requirements.py
 
 ocean/runtime/__init__.py
@@ -2392,6 +2772,16 @@ ocean/runtime/status.py
 
 ocean/setup_flow.py
 
+ocean/testing/__init__.py
+
+ocean/testing/real_scenarios.py
+
+ocean/testing/scenarios.py
+
+ocean/testing/tmux_scenario_run.py
+
+ocean/token_budget.py
+
 ocean/tools/__init__.py
 
 ocean/tools/deploy.py
@@ -2400,13 +2790,11 @@ ocean/tools/design_system.py
 
 ocean/tools/v0_cli.py
 
-ocean/tui_fallback.py
+ocean/ui/__init__.py
+
+ocean/ui/app.py
 
 ocean-cli
-
-ocean-tui/Cargo.toml
-
-ocean-tui/src/main.rs
 
 ocean.egg-info/PKG-INFO
 
@@ -2524,6 +2912,28 @@ ocean_brython-snake/ui/styles.css
 
 ocean_entrypoint.py
 
+ocean_reify/.claude.json.backup
+
+ocean_reify/docs/backlog.json
+
+ocean_reify/docs/ocean_prefs.json
+
+ocean_reify/docs/plan.md
+
+ocean_reify/docs/prd.md
+
+ocean_reify/docs/project.json
+
+ocean_reify/logs/events-20260511-125414.jsonl
+
+ocean_reify/logs/root-venv-install.log
+
+ocean_reify/logs/session-20260511-125414.log
+
+ocean_reify/rainbow_bridge_canal.py
+
+ocean_reify/venv/pyvenv.cfg
+
 package-lock.json
 
 package.json
@@ -2548,6 +2958,8 @@ readme.md
 
 requirements.txt
 
+scripts/check_personas_skills.py
+
 scripts/mcp_stdio_smoke.py
 
 scripts/mcp_talk.py
@@ -2558,7 +2970,13 @@ scripts/npm-postinstall.mjs
 
 scripts/ocean
 
+scripts/ocean-terminal-interactive.sh
+
+scripts/ocean-terminal-smoke.sh
+
 scripts/regression.sh
+
+scripts/tmux_ocean_scenario.sh
 
 setup.sh
 
@@ -2575,6 +2993,10 @@ tests/__pycache__/test_codex_e2e.cpython-311-pytest-9.0.3.pyc
 tests/__pycache__/test_codex_e2e.cpython-311.pyc
 
 tests/__pycache__/test_control_room.cpython-311-pytest-9.0.3.pyc
+
+tests/__pycache__/test_core_onboarding.cpython-311-pytest-9.0.3.pyc
+
+tests/__pycache__/test_launcher.cpython-311-pytest-9.0.3.pyc
 
 tests/__pycache__/test_mcp_stdio.cpython-311-pytest-9.0.3.pyc
 
@@ -2594,9 +3016,17 @@ tests/__pycache__/test_product_loop.cpython-311-pytest-9.0.3.pyc
 
 tests/__pycache__/test_product_loop.cpython-311.pyc
 
+tests/__pycache__/test_pty_harness.cpython-311-pytest-9.0.3.pyc
+
 tests/__pycache__/test_runtime_cycle.cpython-311-pytest-9.0.3.pyc
 
 tests/__pycache__/test_setup_flow.cpython-311-pytest-9.0.3.pyc
+
+tests/__pycache__/test_subprocess_flows.cpython-311-pytest-9.0.3.pyc
+
+tests/__pycache__/test_textual_ocean_pilot.cpython-311-pytest-9.0.3.pyc
+
+tests/__pycache__/test_token_budget.cpython-311-pytest-9.0.3.pyc
 
 tests/__pycache__/test_tui_regression.cpython-311-pytest-9.0.3.pyc
 
@@ -2610,6 +3040,10 @@ tests/test_codex_e2e.py
 
 tests/test_control_room.py
 
+tests/test_core_onboarding.py
+
+tests/test_launcher.py
+
 tests/test_mcp_stdio.py
 
 tests/test_module_invoke.py
@@ -2622,9 +3056,19 @@ tests/test_planner.py
 
 tests/test_product_loop.py
 
+tests/test_pty_harness.py
+
 tests/test_runtime_cycle.py
 
 tests/test_setup_flow.py
+
+tests/test_subprocess_flows.py
+
+tests/test_textual_ocean_pilot.py
+
+tests/test_textual_real_scenarios.py
+
+tests/test_token_budget.py
 
 tests/test_tui_smoke.py
 
@@ -2756,7 +3200,7 @@ docs/search_context.md
 
 docs/test_report.md
 
-docs/toad_first_run.md
+docs/textual_tmux_pilot_scenarios.md
 
 
 ## file samples (truncated)
@@ -2765,147 +3209,27 @@ docs/toad_first_run.md
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from fastapi import FastAPI
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-
-from ocean.actors import add_actor_skill, coverage_report, load_actors, save_actors, update_actor
-from ocean.jobs import plan_jobs
-from ocean.product_chat import product_chat, recent_chat
-from ocean.product_loop import DOCTRINE_FILES, bootstrap_doctrine, record_feedback, turn
-
-
-ROOT = Path(__file__).resolve().parent.parent
-UI_DIR = ROOT / "ui"
-UI_DIST_DIR = UI_DIR / "dist"
-STATIC_UI_DIR = UI_DIST_DIR if UI_DIST_DIR.exists() else UI_DIR
-
-app = FastAPI(title="Ocean Control Room", version="0.3.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="OCEAN - Multi-Agent Software Engineering Orchestrator",
+    version="0.1.0",
 )
-
-if STATIC_UI_DIR.exists():
-    if UI_DIST_DIR.exists() and (UI_DIST_DIR / "assets").exists():
-        app.mount("/assets", StaticFiles(directory=str(UI_DIST_DIR / "assets")), name="assets")
-    app.mount("/ui", StaticFiles(directory=str(STATIC_UI_DIR), html=True), name="ui")
-
-
-class ProjectRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-
-
-class ActorUpdate(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    name: str | None = None
-    role: str | None = None
-    mission: str | None = None
-    phase: str | None = None
-    skills: list[str] | None = None
-    tools: list[str] | None = None
-    active: bool | None = None
-
-
-class SkillRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    skill: str
-
-
-class ActorsSaveRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    actors: list[dict[str, Any]]
-
-
-class TurnRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    user_turn: str = ""
-    feedback: str = ""
-    test_results: str = ""
-    candidate_tasks: list[str] = Field(default_factory=list)
-    use_advisor: bool = True
-
-
-class JobPlanRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    user_turn: str = ""
-    test_results: str = ""
-    candidate_tasks: list[str] = Field(default_factory=list)
-    use_advisor: bool = True
-
-
-class FeedbackRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    feedback: str
-    source: str = "Reif"
-    test_context: str | None = None
-    update_files: bool = True
-
-
-class ChatScreenshot(BaseModel):
-    name: str = "screenshot.png"
-    data_url: str
-    note: str = ""
-
-
-class ChatRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    message: str
-    screenshots: list[ChatScreenshot] = Field(default_factory=list)
-    test_notes: str = ""
-    update_feedback: bool = False
-    use_advisor: bool = True
-
-
-class FileReadRequest(BaseModel):
-    project_root: str = Field(default_factory=lambda: str(ROOT))
-    path: str
 
 
 @app.get("/")
-def index():
-    index_path = STATIC_UI_DIR / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return {"name": "Ocean Control Room", "ui": "/ui"}
-
-
-@app.get("/healthz")
-def healthz():
-    return {"ok": True, "status": "healthy"}
-
-
-@app.get("/api/state")
-def state(project_root: str = str(ROOT)):
-    root = _resolve_root(project_root)
-    bootstrap_doctrine(root)
+def index() -> dict[str, str]:
     return {
-        "project_root": str(root),
-        "actors": load_actors(root),
-        "coverage": coverage_report(root),
-        "doctrine": _read_doctrine(root),
+        "name": "OCEAN - Multi-Agent Software Engineering Orchestrator",
+        "status": "ready",
+        "message": "Ocean runs the crew and timing; you steer goals and say when we're done.",
     }
 
 
-@app.get("/api/actors")
-def actors(project_root: str = str(ROOT)):
-    root = _resolve_root(project_root)
-    return {"project_root": str(root), "actors": load_actors(root)}
+@app.get("/healthz")
+def healthz() -> dict[str, object]:
+    return {"ok": True, "status": "healthy"}
 
-
-@app.put("/api/actors")
-def replace_actors(request: ActorsSaveRequest):
-    root = _resolve_root(request.project_root)
-    return {"proj
 
 ### ui/dist/assets/index-BKJ8Rgd1.css
 
@@ -2938,301 +3262,327 @@ def replace_actors(request: ActorsSaveRequest):
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ocean</title>
+    <meta
+      name="description"
+      content="OCEAN is a multi-agent software engineering orchestrator for planning, assigning, verifying, and shipping work with a FastAPI backend and static UI."
+    />
+    <title>OCEAN - Multi-Agent Software Engineering Orchestrator</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script>
-      window.API_BASE = window.API_BASE || "";
-    </script>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+    <a class="skip-link" href="#main">Skip to content</a>
 
+    <header class="site-header" aria-label="Primary navigation">
+      <nav class="nav-shell">
+        <a class="brand" href="#top" aria-label="OCEAN home">
+          <span class="brand-mark" aria-hidden="true">O</span>
+          <span>
+            <strong>OCEAN</strong>
+            <small>Multi-Agent Orchestrator</small>
+          </span>
+        </a>
+        <div class="nav-links" aria-label="Page sections">
+          <a href="#system">System</a>
+          <a href="#stack">Stack</a>
+          <a href="#handoff">Handoff</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section id="top" class="hero section-band">
+        <div class="hero-shell">
+          <div class="hero-copy">
+            <p class="eyebrow">Testing enabled. Containerized. FastAPI backed.</p>
+            <h1>OCEAN runs the crew. You steer the build.</h1>
+            <p class="lead">
+              A sharp control surface for multi-agent software engineering: product intent, backlog ownership, codegen context, runtime status, and verification in one disciplined loop.
+            </p>
+            <div class="hero-actions" aria-label="Primary actions">
+              <a class="button primary" href="#handoff">Start the handoff</a>
+              <a class="button secondary" href="#system">Inspect the system</a>
+            </div>
+          </div>
+
+          <figure class="orchestration-board" aria-label="OCEAN orchestration board preview">
+            <div class="board-topline">
+              <span>Live Project</span>
+              <strong>Ready</strong>
+            </div>
+            <div class="board-grid">
+              <div class="board-card captain">
+                <span class="node-dot"></span>
+                <strong>Captain</strong>
+                <p>Ranks the next valuable move.</p>
+              </div>
+              <div class="board-card q">
+                <span class="node-dot"></span>
+                <strong>Q</strong>
+                <p>Locks API contracts and tests.</p>
+              </div>
+              <div class="board-card edna">
+                <span class="node-dot"></span>
+                <strong>Edna</strong>
+                <p>Shapes the static interface.</p>
+              </div>
+              <div class="board-card mario">
+                <span class="node-dot"></span>
+                <strong>Mario</strong>
+                <p>Ships CI, Docker, deploys.</p>
+              </div>
+            </div>
+            <div class="pipeline" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <section id="system" class="section-band system-section">
+        <div class="content-shell">
+          <div class="section-heading">
+            <p class="eyebrow">System discipline</p>
+            <h2>One control plane for planning, execution, and proof.</h2>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span class="feature-kicker">01</span>
+              <h3>Backlog with owners</h3>
+              <p>Each task has a named agent, touched files, acceptance criteria, and a clean handoff path.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-kicker">02</span>
+              <h3>File-first context</h3>
+              <p>Project state stays reviewable i
 
 ### ui/styles.css
 
 :root {
-  --bg: #f5f7f8;
-  --panel: #ffffff;
-  --ink: #1d282c;
-  --muted: #65747a;
-  --line: #d9e2e5;
-  --accent: #0f766e;
-  --accent-2: #b88718;
-  --dark: #182225;
-  --shadow: 0 8px 28px rgba(29, 40, 44, 0.08);
+  color-scheme: light;
+  --color-ink: #172126;
+  --color-muted: #52636a;
+  --color-soft: #eef4f4;
+  --color-surface: #ffffff;
+  --color-surface-strong: #f8fbfb;
+  --color-line: #d4e0e2;
+  --color-dark: #111b20;
+  --color-dark-2: #1d2b31;
+  --color-teal: #0f766e;
+  --color-teal-strong: #115e59;
+  --color-gold: #b88718;
+  --color-coral: #b84d4d;
+  --color-focus: #f2b84b;
+  --shadow-soft: 0 18px 50px rgba(17, 27, 32, 0.12);
+  --shadow-tight: 0 10px 28px rgba(17, 27, 32, 0.1);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+  --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --content: 1160px;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--color-soft);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  line-height: 1.5;
   letter-spacing: 0;
 }
 
-button,
-input,
-textarea {
-  font: inherit;
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(17, 27, 32, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(17, 27, 32, 0.04) 1px, transparent 1px),
+    var(--color-soft);
+  background-size: 44px 44px;
 }
 
-button {
-  border: 0;
-  border-radius: 6px;
-  min-height: 38px;
-  padding: 9px 13px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-button:hover {
-  background: #115e59;
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
 }
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 4px;
 }
 
-button.ghost {
-  background: #eef3f3;
-  color: var(--ink);
-  border: 1px solid var(--line);
-}
-
-button.ghost:hover {
-  background: #e3ebeb;
-}
-
-button.secondary {
-  background: #263438;
-}
-
-button.secondary:hover {
-  background: #33454a;
-}
-
-input,
-textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 9px 10px;
-  color: var(--ink);
-  background: #fff;
-}
-
-textarea {
-  resize: vertical;
-}
-
-input:focus,
-textarea:focus {
-  outline: 2px solid rgba(15, 118, 110, 0.18);
-  border-color: var(--accent);
-}
-
-code {
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: #edf3f4;
-  color: #315d66;
-}
-
-.shell {
-  display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  min-height: 100vh;
-}
-
-.side {
-  background: var(--dark);
-  color: #fff;
-  padding: 20px;
-  display: grid;
-  grid-template-rows: auto auto minmax(230px, auto) minmax(0, 1fr);
-  gap: 18px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: #e4b94b;
-  color: #111;
+.skip-link {
+  position: fixed;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: 20;
+  transform: translateY(-160%);
+  border-radius: var(--radius-sm);
+  background: var(--color-dark);
+  color: #ffffff;
+  padding: var(--space-3) var(--space-4);
   font-weight: 800;
 }
 
-.brand h1,
-.brand p,
-.section-head h2,
-.actor h3,
-.chat-head h2,
-.chat-head p {
-  margin: 0;
+.skip-link:focus {
+  transform: translateY(0);
 }
 
-.emoji {
-  margin-right: 6px;
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid rgba(212, 224, 226, 0.84);
+  background: rgba(248, 251, 251, 0.92);
+  backdrop-filter: blur(14px);
 }
 
-.brand h1 {
-  font-size: 22px;
+.nav-shell,
+.content-shell,
+.hero-shell {
+  width: min(100% - 2rem, var(--content));
+  margin-inline: auto;
 }
 
-.brand p,
-.repo-field span,
-.section-head span {
-  color: #9fb0b5;
-  font-size: 13px;
-}
-
-.repo-field {
-  display: grid;
-  gap: 7px;
-}
-
-.side-section {
-  display: grid;
-  gap: 10px;
-  min-height: 0;
-}
-
-.section-head {
+.nav-shell {
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-5);
 }
 
-.section-head h2,
-.section-head h3 {
-  font-size: 15px;
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
 }
 
-.actor-list {
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
   display: grid;
-  gap: 10px;
-  overflow: auto;
-  padding-right: 2px;
+  place-items: center;
+  background: var(--color-gold);
+  color: #111111;
+  font-weight: 900;
+  box-shadow: var(--shadow-tight);
 }
 
-.actor {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 12px;
-  display: grid;
-  gap: 9px;
+.brand strong,
+.brand small {
+  display: block;
 }
 
-.actor-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+.brand strong {
+  font-size: 1rem;
+  line-height: 1.1;
 }
 
-.actor h3 {
-  font-size: 15px;
+.brand small {
+  margin-top: 0.15rem;
+  color: var(--color-muted);
+  font-size: 0.78rem;
 }
 
-.actor p {
-  margin: 3px 0 0;
-  color: #9fb0b5;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.filter {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-.filter::placeholder {
-  color: #9fb0b5;
-}
-
-.files-section {
-  overflow: hidden;
-}
-
-.file-list {
-  overflow: auto;
-  display: grid;
-  gap: 4px;
-  padding-right: 2px;
-}
-
-.file-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  text-align: left;
-  background: transparent;
-  color: #d8e5e8;
-  border: 1px solid transparent;
-  padding: 7px 8px;
-  min-height: 32px;
-}
-
-.file-row:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.file-row span {
+.nav-links {
   display: flex;
   align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  gap: clamp(var(--space-3), 2vw, var(--space-6));
+  color: var(--color-muted);
+  font-size: 0.94rem;
+  font-weight: 750;
 }
 
-.file-row small {
-  color: #9fb0b5;
+.section-band {
+  padding-block: var(--space-9);
 }
 
-.chat {
-  min-width: 0;
-  padding: 22px;
+.hero {
+  min-height: calc(100vh - 72px);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: 14px;
+  align-items: center;
+  background:
+    linear-gradient(120deg, rgba(17, 27, 32, 0.96), rgba(22, 45, 49, 0.9)),
+    var(--color-dark);
+  color: #ffffff;
 }
 
-.chat-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
+.hero-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
+  align-items: center;
+  gap: clamp(var(--space-6), 7vw, var(--space-9));
 }
 
-.chat-head h2 {
-  font-size: 26px;
+.hero-copy {
+  max-width: 720px;
 }
 
-.
+.eyebrow {
+  margin: 0 0 var(--space-3);
+  color: var(--color-gold);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+h1 {
+  margin-bottom: var(--space-5);
+  max-width: 820px;
+  font-size: clamp(3rem, 8vw, 6.7rem);
+}
+
+h2 {
+  margin-bottom: var(--space-4);
+  font-size: clamp(2rem, 4vw, 3.75rem);
+}
+
+h3 {
+  
 
 ### docs/adr/0001-record-architecture-decisions.md
 
@@ -3274,21 +3624,128 @@ Generated by OCEAN (local fallback)
 
 ### docs/architecture.md
 
-# Ocean Project PRD — Web Tic-Tac-Toe - Web Architecture
+# 🌊 OCEAN - Multi-Agent Software Engineering Orchestrator - Architecture
 
-## Project Overview
-- **Type**: Web Application
-- **Goals**: Single‑player Tic‑Tac‑Toe vs computer, Simple, responsive UI (HTML/CSS/JS), Minimal backend with health check and scores API, Persist high scores locally (file or SQLite), Clear instructions and quick start script
-- **Constraints**: Minimal dependencies, Work offline, no cloud services required
+## Mission
 
-## Architecture Design
-- **Frontend**: Static UI served from `ui/`
-- **Backend**: FastAPI app in `backend/app.py`
-- **Endpoints**: `/` (welcome), `/healthz` (health)
-- **Deployment**: Containerized with Docker; CI via GitHub Actions
+OCEAN is a web-based orchestration control room for multi-agent software engineering. It keeps product intent, agent responsibilities, backlog execution, runtime status, and verification feedback in one clear operating surface.
 
-Generated by OCEAN (local fallback)
+The standard is simple: file-first context, a small FastAPI backend, a static browser UI, reliable tests, and a containerized runtime that can be moved without ceremony.
 
+## Goals
+
+- Testing enabled with a repeatable pytest suite and CI checks.
+- Containerized so the same application can run locally or in deployment.
+- FastAPI backend for health, state, planning, chat, and orchestration endpoints.
+- Static UI for the control room experience.
+- Minimal dependencies and explicit operational boundaries.
+
+## Constraints
+
+- Prefer the Python standard library and existing project dependencies before adding packages.
+- Keep the backend deployable as a single FastAPI application.
+- Keep the UI static and build-output friendly.
+- Avoid database requirements for the core loop until a later milestone proves the need.
+- Preserve durable project state in plain files so decisions remain reviewable.
+
+## System Shape
+
+```text
+User / Browser
+      |
+      v
+Static UI: ui/ or ui/dist/
+      |
+      v
+FastAPI Backend: backend/app.py
+      |
+      v
+Ocean Core Modules: ocean/*
+      |
+      v
+Project Files: docs/*, .ocean/*, doctrine markdown, logs/*
+```
+
+## Architecture Principles
+
+### File-First State
+
+OCEAN treats the repository as the source of truth. Project context, backlog, plans, doctrine, chat history, and job records are stored in files that can be reviewed, diffed, committed, and recovered.
+
+Primary state locations:
+
+- `docs/project.json` for project identity, goals, constraints, and vision.
+- `docs/backlog.json` for planned work.
+- `docs/plan.md` for visible execution sequencing.
+- `docs/context_summary.md` for compressed codegen context.
+- `.ocean/actors.json` for crew definitions.
+- `.ocean/jobs.json` for generated jobs.
+- `.ocean/chat.jsonl` for chat history.
+- Doctrine files such as `VISION.md`, `TASKS.md`, `FEEDBACK.md`, and `DECISIONS.md`.
+
+### Small Control Plane
+
+The FastAPI backend should coordinate the system, not become a general application platform. Its job is to expose bounded operations over project state and orchestration workflows.
+
+Core responsibilities:
+
+- Serve the static UI.
+- Report runtime health.
+- Read project context and doctrine.
+- Manage actors and jobs.
+- Accept chat turns and product feedback.
+- Produce scoped handoff prompts for coding agents.
+
+### Static Command Surface
+
+The UI is the operator console. It should help the user see the mission, crew, files, chat, and next action without hiding important state behind opaque services.
+
+Expected interface areas:
+
+- Project identity and runtime health.
+- Crew and actor coverage.
+- Chat-first feedback loop.
+- Relevant file inspection.
+- Job planning and handoff prompts.
+- Test and readiness summaries.
+
+## Runtime Components
+
+### FastAPI Backend
+
+Anchor module: `backend/app.py`
+
+Expected endpoint groups:
+
+- Health: `GET /healthz`
+- Root or app shell: `GET /`
+- State: project, actors, coverage, doctrine, and runtime summary.
+- Chat: record user turns, feedback, and test notes.
+- Jobs: generate and list scoped work items.
+- Files: read bounded project files safely under the project root.
+
+Backend standards:
+
+- Validate request and response shapes with typed models where useful.
+- Resolve paths safely under the intended project root.
+- Return clear HTTP errors for missing files, invalid input, or unsafe paths.
+- Keep endpoint names aligned with product workflow.
+- Cover new behavior with focused pytest tests.
+
+### Static UI
+
+Source location: `ui/`
+
+Build output: `ui/dist/`
+
+The UI may run in two modes:
+
+- Development: Vite or a lightweight static dev server.
+- Production: compiled static assets served by FastAPI or a static host.
+
+UI standards:
+
+- Priorit
 
 ### docs/backlog.json
 
@@ -3356,7 +3813,7 @@ Generated by OCEAN (local fallback)
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8001/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8004/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   },
@@ -3419,7 +3876,9 @@ Generated by OCEAN using Codex MCP
   "constraints": [
     "minimal dependencies"
   ],
-  "createdAt": "2026-05-11T09:30:25.015380"
+  "vision": "## Summary",
+  "ai_identity": "Your coding partner on **🌊 OCEAN - Multi-Agent Software Engineering Orchestrator** — Ocean runs the crew and timing; you steer goals and say when we're done.",
+  "createdAt": "2026-05-12T10:15:46.528184"
 }
 
 
@@ -3490,7 +3949,7 @@ Generated by OCEAN using Codex MCP
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8000/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8004/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   },
@@ -3586,23 +4045,7 @@ Generated by OCEAN using Codex MCP
 
 .git/hooks/pre-receive.sample
 
-.git/hooks/prepare-commit-msg.sample
-
-.git/hooks/push-to-checkout.sample
-
-.git/hooks/sendemail-validate.sample
-
-.git/hooks/update.sample
-
-.git/index
-
-.git/info/exclude
-
-.git/logs/HEAD
-
-.git/packed-refs
-
-.gith
+.git
 
 ### docs/context_summary.md
 
@@ -3621,8 +4064,11 @@ Generated by OCEAN using Codex MCP
   "constraints": [
     "minimal dependencies"
   ],
-  "createdAt": "2026-05-11T12:21:20.305827"
+  "vision": "## Summary",
+  "ai_identity": "Your coding partner on **🌊 OCEAN - Multi-Agent Software Engineering Orchestrator** — Ocean runs the crew and timing; you steer goals and say when we're done.",
+  "createdAt": "2026-05-12T10:15:46.528184"
 }
+
 
 
 ## backlog.json
@@ -3691,7 +4137,7 @@ Generated by OCEAN using Codex MCP
   },
   {
     "title": "Start local runtime",
-    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8001/healthz | http://127.0.0.1:5173",
+    "description": "Launch local backend (and UI if present) and print URL | URLs: http://127.0.0.1:8004/healthz | http://127.0.0.1:5173",
     "owner": "Mario",
     "files_touched": []
   },
@@ -3704,6 +4150,7 @@ Generated by OCEAN using Codex MCP
     ]
   }
 ]
+
 
 
 ## plan.md
@@ -3721,6 +4168,7 @@ Generated by OCEAN using Codex MCP
 - [Mario] Create deployment config — devops/deploy.yaml
 - [Mario] Start local runtime — (tbd)
 - [Tony] Run test suite and write report — docs/test_report.md
+
 
 
 ## prd.md (truncated)
@@ -3742,6 +4190,7 @@ Generated by OCEAN using Codex MCP
 ## Detected
 - Kind: web
 - Tech: Python/pyproject, requirements.txt, Node/package.json, Dockerfile, GitHub Actions
+
 
 
 ## repository tree (depth=3)
@@ -3784,23 +4233,7 @@ Generated by OCEAN using Codex MCP
 
 .git/hooks/pre-receive.sample
 
-.git/hooks/prepare-commit-msg.sample
-
-.git/hooks/push-to-checkout.sample
-
-.git/hooks/sendemail-validate.sample
-
-.git/hooks/update.sample
-
-.git/index
-
-.git/info/exclude
-
-.git/logs/HEAD
-
-.git/packed-refs
-
-.github/w
+.git
 
 ### docs/deploy.md
 
@@ -4029,12 +4462,19 @@ Ocean does not guess from doctrine alone. For each turn it pulls a bounded build
 agents:
   Mario:
     emoji: "🍄"
+    skills:
+      - GitHub Actions, Dockerfiles, Compose orchestration
+      - CI/CD wiring, rollout & rollback drills
+      - Render/Railway-style deploy stubs & env hygiene
+      - Monitoring hooks, health checks, local staging
     traits:
       - Pragmatic, resilient, production-first
       - Optimistic and energetic, fixes “clogs” fast
     diction:
-      - "It’s-a me, Mario!", "Let’s-a go!", "Here we go!"
-      - Simple exclamations: "Mamma mia!", "Wahoo!", "Woo-hoo!"
+      - "It’s-a me, Mario!"
+      - "Let’s-a go!"
+      - "Here we go!"
+      - 'Simple exclamations: "Mamma mia!", "Wahoo!", "Woo-hoo!"'
     avoid:
       - Overly technical explanations
       - Corporate jargon or long theory
@@ -4058,10 +4498,15 @@ agents:
       - "Woo-hoo!"
 
   Q:
-    emoji: "🔫"
+    emoji: "🔧"
     traits:
       - Dry wit, surgical precision, loves gadgets
       - Test-driven, obsessed with safety nets
+    skills:
+      - Python backends (FastAPI, services, integrations)
+      - Data models, API contracts, test-driven loops
+      - pytest, guardrails, fail-safe defaults
+      - Codex MCP implementation passes
     diction:
       - "Pay attention, 007."
       - Talks in terms of specs, prototypes, guardrails
@@ -4088,7 +4533,12 @@ agents:
       - "Wry gadget jokes after explosions (paraphrased)"
 
   Tony:
-    emoji: "🚀"
+    emoji: "🧪"
+    skills:
+      - Exploratory & stress-path testing against new builds
+      - pytest harnesses, shell probes, reproducible bugs
+      - Telemetry reads, flaky-test triage
+      - docs/test_report.md narratives for the crew
     traits:
       - Brash, charismatic, experimental
       - Thrives in chaos, stress-tests boundaries
@@ -4102,7 +4552,7 @@ agents:
       - Fast, witty banter
       - Crisp repro steps when bug-hunting
     calibration:
-      do: "Edge cases tested. Broke on #2, fixed it. 🚀"
+      do: "Edge cases tested. Broke on #2, fixed it. 🧪"
       dont: "We’ll table this for a six-month review."
     context_hooks:
       deploy: "Pushes bold moves, prototypes in prod"
@@ -4115,28 +4565,7 @@ agents:
       - "Everyone wants a happy ending. Not everyone gets it."
       - "I am Iron Man."
       - "Genius, billionaire, playboy, philanthropist."
-      - "I built this in a cave with scraps!"
-
-  Moroni:
-    emoji: "🕹️"
-    traits:
-      - Calm commander, strategic, principle-driven
-      - Decomposes missions into phases
-    diction:
-      - "Acceptance criteria", "standards", "banners"
-      - Scriptural cadence; invokes God, liberty, duty
-    avoid:
-      - Vagueness, improvisation without plan
-      - Casual irreverence
-    style:
-      - Formal, structured; lists phases
-      - Motivational, disciplined tone
-    calibration:
-      do: "Phase 1: gather resources. Phase 2: secure interfaces. 🕹️"
-      dont: "Let’s just wing it and hope for the best."
-    context_hooks:
-      planning: "Frames goals as campaigns with standards"
-
+      - "I b
 
 ### docs/plan.md
 
@@ -4191,7 +4620,9 @@ agents:
   "constraints": [
     "minimal dependencies"
   ],
-  "createdAt": "2026-05-11T12:43:39.107181"
+  "vision": "## Summary",
+  "ai_identity": "Your coding partner on **🌊 OCEAN - Multi-Agent Software Engineering Orchestrator** — Ocean runs the crew and timing; you steer goals and say when we're done.",
+  "createdAt": "2026-05-12T10:15:46.528184"
 }
 
 
@@ -4282,50 +4713,156 @@ agents:
 
 # Test Report
 
-Generated: 2026-05-11T12:21:20.827869
+Generated: 2026-05-12T10:15:21.868816
 
 ## Pytest Output
 
 ````
-.............s......................                                     [100%]
+..............sFFFF.................................................     [100%]
+=================================== FAILURES ===================================
+____________________ test_control_room_state_jobs_and_chat _____________________
+
+tmp_path = PosixPath('/private/var/folders/cr/23hzng994jg6rtwz24dpf_xm0000gn/T/pytest-of-reify/pytest-171/test_control_room_state_jobs_a0')
+
+    def test_control_room_state_jobs_and_chat(tmp_path):
+        client = TestClient(app)
+    
+        state = client.get("/api/state", params={"project_root": str(tmp_path)}).json()
+>       assert state["coverage"]["gaps"] == []
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'coverage'
+
+tests/test_control_room.py:10: KeyError
+____________________________ test_filesystem_routes ____________________________
+
+tmp_path = PosixPath('/private/var/folders/cr/23hzng994jg6rtwz24dpf_xm0000gn/T/pytest-of-reify/pytest-171/test_filesystem_routes0')
+
+    def test_filesystem_routes(tmp_path):
+        client = TestClient(app)
+        (tmp_path / "README.md").write_text("# Hello\n", encoding="utf-8")
+    
+        files = client.get("/api/files", params={"project_root": str(tmp_path)}).json()
+>       assert {"path": "README.md", "size": 8} in files["files"]
+                                                   ^^^^^^^^^^^^^^
+E       KeyError: 'files'
+
+tests/test_control_room.py:45: KeyError
+_____________________ test_chat_can_update_doctrine_files ______________________
+
+tmp_path = PosixPath('/private/var/folders/cr/23hzng994jg6rtwz24dpf_xm0000gn/T/pytest-of-reify/pytest-171/test_chat_can_update_doctrine_0')
+
+    def test_chat_can_update_doctrine_files(tmp_path):
+        client = TestClient(app)
+    
+        result = client.post(
+            "/api/chat",
+            json={
+                "project_root": str(tmp_path),
+                "message": "update VISION.md: Ocean should stay chat-only and keep filesystem changes conversational.",
+                "use_advisor": False,
+            },
+        ).json()
+    
+>       assert result["file_updates"] == [{"path": "VISION.md", "mode": "replace"}]
+               ^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'file_updates'
+
+tests/test_control_room.py:66: KeyError
+____________________ test_chat_saves_screenshot_as_artifact ____________________
+
+tmp_path = PosixPath('/private/var/folders/cr/23hzng994jg6rtwz24dpf_xm0000gn/T/pytest-of-reify/pytest-171/test_chat_saves_screenshot_as_0')
+
+    def test_chat_saves_screenshot_as_artifact(tmp_path):
+        client = TestClient(app)
+    
+        result = client.post(
+            "/api/chat",
+            json={
+                "project_root": str(tmp_path),
+                "message": "This screenshot feels confusing.",
+                "screenshots": [
+                    {
+                        "name": "screen.png",
+                        "data_url": "data:image/png;base64,iVBORw0KGgo=",
+                        "note": "",
+                    }
+                ],
+                "use_advisor": False,
+            },
+        ).json()
+    
+>       path = result["screenshots"][0]["path"]
+               ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'screenshots'
+
+tests/test_control_room.py:90: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_control_room.py::test_control_room_state_jobs_and_chat - Ke...
+FAILED tests/test_control_room.py::test_filesystem_routes - KeyError: 'files'
+FAILED tests/test_control_room.py::test_chat_can_update_doctrine_files - KeyE...
+FAILED tests/test_control_room.py::test_chat_saves_screenshot_as_artifact - K...
 
 ````
 
-Exit code: 0
+Exit code: 1
 
 
-### docs/toad_first_run.md
+### docs/textual_tmux_pilot_scenarios.md
 
-# Toad fork: first-run integration with Ocean
+# Textual + Pilot + tmux: real-life test scenarios
 
-Ocean ships no TUI here; host apps (e.g. a **fork of [Toad](https://github.com/batrachianai/toad)**) should orchestrate **`ocean chat`** from the user’s repo root—optionally behind a pseudo-TTY—or drive prefs via MCP.
+Ocean’s Textual shell runs **Moroni-style onboarding** (five answers) then writes **`docs/project.json`**. After that you can queue **`task add …`** lines the same way you would in a real session.
 
-## Session events (`logs/events-*.jsonl`)
+This doc ties together:
 
-Each `ocean chat` invocation sets **`OCEAN_EVENTS_FILE`** to a new **`logs/events-YYYYMMDD-HHMMSS.jsonl`**. Tail it for onboarding UI lines.
+1. **Scenario catalogue** — `ocean/testing/real_scenarios.py` (`TextualProductScenario`).
+2. **Textual Pilot** — in-process tests in `tests/test_textual_real_scenarios.py` (fast CI).
+3. **tmux** — `python -m ocean.testing.tmux_scenario_run <id>` (real pseudo-TTY, closer to how you run `ocean` in iTerm).
 
-Envelope for setup steps:
+> These scenarios prove **spec capture + task queueing** in the Textual shell. They do **not** compile or ship a full game build; codegen still flows through **`ocean chat`** / Codex / your editor.
 
-- **`event`** — always **`"setup"`** for onboarding payloads.
-- **`phase`** — **`"setup"`**.
-- **`kind`** — **`phase_start` \| `phase_end` \| `question` \| `answer` \| `info`**.
-- **`id`** — e.g. `welcome`, `backend_choice`, `credentials`, `crew_intro`, `project_clarify`, `codegen_backend`, `openai_api_key`.
+## Scenario IDs
 
-**Secrets are never emitted.** `openai_api_key` phases only include booleans like `saved` / `prefix_masked`.
+| ID | Intent |
+|----|--------|
+| `tic_tac_toe_localhost` | Browser tic-tac-toe on localhost; three follow-up tasks (board, win detection, dev server docs). |
+| `paddle_wars_keen` | Keen-style paddle arena; three follow-up tasks (paddle/ball, bricks/HUD, pause/restart). |
+| `cli_devtools_scratch` | Small **cli** utility; one follow-up task. |
 
-Example:
+## Pilot (pytest)
 
-```json
-{"event":"setup","ts":"…","phase":"setup","kind":"question","id":"codegen_backend","message":"Where should Ocean send codegen?","choices":["codex","cursor_handoff","dry_plan_only","openai_api"]}
+```bash
+pytest tests/test_textual_real_scenarios.py -q --tb=short
 ```
 
-## MCP (non-TTY hosts)
+Parametrized over every scenario in `SCENARIOS`.
 
-If `ocean chat` stdin is **not** a TTY:
+## tmux (manual or optional CI)
 
-- **`OCEAN_SKIP_BACKEND_PROMPT=1`** or **`OCEAN_CODEGEN_BACKEND=…`** avoids defaulting blindly to Codex.
-- Prefer **`ocean_set_codegen_backend`** `{ "project_root": "…", "backend": "codex" }`.
-- **`ocean_health`** returns **`valid_codegen_backends`** and **`recovery_hints`** for status UI.
+From the **repository root** (venv with `ocean` installed):
 
-Keep **AGPL** compliance when combining Toad and Ocean binaries.
+```bash
+python -m ocean.testing.tmux_scenario_run tic_tac_toe_localhost
+python -m ocean.testing.tmux_scenario_run paddle_wars_keen
+```
+
+Or the thin wrapper:
+
+```bash
+bash scripts/tmux_ocean_scenario.sh paddle_wars_keen
+```
+
+Requirements: **`tmux`** on `PATH`, **`./venv/bin/ocean`** executable.
+
+The driver creates a **temporary workspace**, starts **`ocean`** inside tmux (so stdin/stdout are TTYs), **types each line** with pauses, then checks **`docs/project.json`** on disk.
+
+## Adding a scenario
+
+1. Append a new `TextualProductScenario(...)` to `ocean/testing/real_scenarios.py` and register it in `SCENARIOS`.
+2. Keep **`onboarding_lines` ASCII-only** and avoid embedded quotes (tmux `send-keys` passes each Python `str` as one argument — spaces are fine).
+3. Run Pilot + tmux smoke for the new id.
+
+## Failure triage
+
+Use `ocean.testing.scenarios.pilot_failure_report(...)` from a failing Pilot test to capture **`export_state()`**, recent feed lines, and a traceback for agents.
 
