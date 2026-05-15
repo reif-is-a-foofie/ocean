@@ -5,6 +5,7 @@ command:
   - "chat-repl"
 env:
   OCEAN_TEST: "1"
+  OCEAN_STYLE: "max"
   TERM: dumb
   COLUMNS: "120"
   LINES: "40"

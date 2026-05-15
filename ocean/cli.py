@@ -2244,7 +2244,9 @@ def chat_repl():
             )
             continue
         if line in {"crew", "voices", "skills"}:
-            console.print(crew_cards_plain_text(search_start=ROOT))
+            # Avoid feed()'s OCEAN_FEED_MAXCOL line cap: crew_cards is multi-line and >240 chars.
+            sys.stdout.write(crew_cards_plain_text(search_start=ROOT) + "\n")
+            sys.stdout.flush()
             continue
         if line.startswith("prd:"):
             text = line.split(":", 1)[1].strip()
