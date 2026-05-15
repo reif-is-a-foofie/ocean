@@ -1670,7 +1670,7 @@ def _do_crew(log: Path) -> None:
     for agent in default_agents():
         intro_full = agent.introduce()
         feed_agent_say(agent.name, agent.introduce_detail())
-        for vx in agent_voice_skills_chat_lines(agent.name):
+        for vx in agent_voice_skills_chat_lines(agent.name, search_start=ROOT):
             ich = AGENT_EMOJI.get(agent.name, "🤖")
             feed_line(f"   {ich} · {vx}")
         write_log(log, intro_full)
@@ -2244,7 +2244,7 @@ def chat_repl():
             )
             continue
         if line in {"crew", "voices", "skills"}:
-            console.print(crew_cards_plain_text())
+            console.print(crew_cards_plain_text(search_start=ROOT))
             continue
         if line.startswith("prd:"):
             text = line.split(":", 1)[1].strip()
@@ -2634,7 +2634,7 @@ def scout():
             f"Scope: {scope}. Task: {task}\n"
             "Return JSON mapping the path to Markdown content. Use headings: # Findings, # Suggestions, # Proposed PRs."
             " Keep it concise and actionable."
-            "\nVoice: " + voice_brief(agent, context=scope)
+            "\nVoice: " + voice_brief(agent, context=scope, search_start=ROOT)
         )
         files = codex_exec.generate_files(instruction, [str(out_path.relative_to(Path.cwd()))], bundle, agent=agent)
         if files:
@@ -2661,7 +2661,7 @@ def scout():
             "Synthesize the following agent reports into a cohesive architecture & roadmap. "
             "Approve/reject proposals, and assign phased next steps. Keep it concise."
             " Return JSON mapping to 'docs/repo_scout/Moroni-synthesis.md'."
-            "\nVoice: " + voice_brief("Moroni", context="planning")
+            "\nVoice: " + voice_brief("Moroni", context="planning", search_start=ROOT)
         )
         files = codex_exec.generate_files(instruction, [str(synth_path)], tmp, agent="Moroni")
         if files:

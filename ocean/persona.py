@@ -24,12 +24,38 @@ def _read_yaml(path: Path) -> Dict[str, Any]:
         return {"agents": {}}
 
 
-def load_personas(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+def _bundled_personas_path() -> Path:
+    """Shipped defaults next to this module (keep in sync with docs/personas.yaml in the repo)."""
+    return Path(__file__).resolve().parent / "personas.yaml"
+
+
+def resolve_personas_yaml_path(*, search_start: Optional[Path] = None) -> Optional[Path]:
+    """Locate docs/personas.yaml: walk parents from search_start (or cwd), else bundled package file."""
+    start = (search_start or Path.cwd()).resolve()
+    for d in [start, *start.parents]:
+        cand = d / "docs" / "personas.yaml"
+        if cand.is_file():
+            return cand
+    bundled = _bundled_personas_path()
+    if bundled.is_file():
+        return bundled
+    return None
+
+
+def load_personas(path: Optional[Path] = None, *, search_start: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
     """Load personas from docs/personas.yaml (or JSON fallback).
+
+    When ``path`` is omitted, searches upward from ``search_start`` (default: cwd) for
+    ``docs/personas.yaml``, then falls back to the bundled ``ocean/personas.yaml``.
 
     Returns a mapping of agent name -> persona dict. Missing file returns empty mapping.
     """
-    p = path or Path("docs/personas.yaml")
+    if path is not None:
+        p = path
+    else:
+        p = resolve_personas_yaml_path(search_start=search_start)
+        if p is None:
+            return {}
     data = _read_yaml(p)
     agents = data.get("agents") or {}
     out: Dict[str, Dict[str, Any]] = {}
@@ -40,13 +66,19 @@ def load_personas(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def voice_brief(agent: str, context: Optional[str] = None, max_chars: int = 400) -> str:
+def voice_brief(
+    agent: str,
+    context: Optional[str] = None,
+    max_chars: int = 400,
+    *,
+    search_start: Optional[Path] = None,
+) -> str:
     """Create a short, non-quoting voice guide for an agent.
 
     - Avoids verbatim quotes; uses traits/diction/style/avoid/context_hooks.
     - Returns a single paragraph suitable to prepend to content instructions.
     """
-    p = load_personas().get(agent, {})
+    p = load_personas(search_start=search_start).get(agent, {})
     style_level = (os.getenv("OCEAN_STYLE") or "max").strip().lower()
     traits = ", ".join(p.get("traits", [])[:3])
     skills = p.get("skills", [])
@@ -100,10 +132,16 @@ def voice_brief(agent: str, context: Optional[str] = None, max_chars: int = 400)
 _CREW_FEED_ORDER: tuple[str, ...] = ("Moroni", "Q", "Edna", "Mario", "Tony")
 
 
-def agent_voice_skills_chat_lines(agent: str, *, max_skill_items: int = 12, style_level: str | None = None) -> list[str]:
+def agent_voice_skills_chat_lines(
+    agent: str,
+    *,
+    max_skill_items: int = 12,
+    style_level: str | None = None,
+    search_start: Path | None = None,
+) -> list[str]:
     """Terminal-chat lines derived from personas.yaml (voice + skills)."""
     lvl = (style_level or (os.getenv("OCEAN_STYLE") or "max")).strip().lower()
-    p = load_personas().get(agent, {})
+    p = load_personas(search_start=search_start).get(agent, {})
     lines: list[str] = []
     cal = p.get("calibration")
     if isinstance(cal, dict) and cal.get("do"):
@@ -133,7 +171,11 @@ def agent_voice_skills_chat_lines(agent: str, *, max_skill_items: int = 12, styl
     return lines
 
 
-def crew_cards_plain_text(order: tuple[str, ...] | None = None) -> str:
+def crew_cards_plain_text(
+    order: tuple[str, ...] | None = None,
+    *,
+    search_start: Path | None = None,
+) -> str:
     """Multi-line plaintext card for Chat REPL / quick reference."""
     from .personas import AGENT_EMOJI
 
@@ -142,7 +184,7 @@ def crew_cards_plain_text(order: tuple[str, ...] | None = None) -> str:
     for agent in names:
         ic = AGENT_EMOJI.get(agent, "🤖")
         segments.append(f"{ic} {agent}")
-        for part in agent_voice_skills_chat_lines(agent):
+        for part in agent_voice_skills_chat_lines(agent, search_start=search_start):
             segments.append(f"  · {part}")
         segments.append("")
     return "\n".join(segments).rstrip()
