@@ -36,11 +36,11 @@ The agent does the coding. Ocean handles who gets what, when, and in what order.
 ## Quick start
 
 ```bash
-# Full interactive flow (same as `ocean chat`)
+# Full interactive flow
 ocean
 
 # Quick REPL
-ocean chat-repl
+ocean chat --quick
 ```
 
 In the REPL:
@@ -70,9 +70,10 @@ ocean> exit
 
 | Command | What it does |
 |---|---|
-| `ocean` | Full interactive chat — clarify → crew → plan → build (same as `ocean chat`) |
+| `ocean` | Full interactive chat — clarify → crew → plan → build |
 | `ocean chat` | Same as bare `ocean` (explicit subcommand) |
-| `ocean chat-repl` | Quick REPL with `prd:` / `plan` / `build` / `crew` / `status` |
+| `ocean chat --quick` | Quick REPL with `prd:` / `plan` / `build` / `crew` / `status` and free-text chat |
+| `ocean chat-repl` | Standalone quick REPL with the same command surface |
 | `ocean crew` | Show each agent's skills and voicing |
 | `ocean clarify` | Capture project intent, save `docs/project.json` |
 | `ocean doctor` | Check Codex/Claude auth and environment |

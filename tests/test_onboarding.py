@@ -176,3 +176,130 @@ def test_prompt_openai_tty_saves_env(monkeypatch, tmp_path: Path):
     env_text = (tmp_path / ".env").read_text(encoding="utf-8")
     assert "OPENAI_API_KEY=" in env_text
     assert os.environ.get("OPENAI_API_KEY") == "sk-fake-secret"
+
+
+def test_quickstart_existing_key_requires_explicit_choice(monkeypatch, tmp_path: Path):
+    import ocean.cli as cli_mod
+    from rich.prompt import Prompt
+
+    _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli_mod, "_is_test_env", lambda: False)
+    monkeypatch.delenv("OCEAN_CODEGEN_BACKEND", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "AIza-existing-secret")
+    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True)
+
+    prompts: list[str] = []
+
+    def fake_prompt(text, default=None, choices=None):
+        prompts.append(str(text))
+        assert choices and "3" in choices
+        return "3"
+
+    monkeypatch.setattr(Prompt, "ask", fake_prompt)
+
+    backend = cli_mod._quickstart_login_if_possible(tmp_path)
+
+    assert backend == "gemini_api"
+    assert "Choose login" in prompts
+    prefs = json.loads((tmp_path / "docs" / "ocean_prefs.json").read_text(encoding="utf-8"))
+    assert prefs["codegen_backend"] == "gemini_api"
+
+
+def test_quickstart_pasted_openai_key_is_parsed_and_saved(monkeypatch, tmp_path: Path):
+    import ocean.cli as cli_mod
+    from rich.prompt import Prompt
+
+    _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli_mod, "_is_test_env", lambda: False)
+    monkeypatch.delenv("OCEAN_CODEGEN_BACKEND", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Prompt, "ask", lambda *args, **kwargs: "2")
+    monkeypatch.setattr(cli_mod.getpass, "getpass", lambda _p="": "sk-test-secret")
+
+    backend = cli_mod._quickstart_login_if_possible(tmp_path)
+
+    assert backend == "openai_api"
+    env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY=sk-test-secret" in env_text
+    prefs = json.loads((tmp_path / "docs" / "ocean_prefs.json").read_text(encoding="utf-8"))
+    assert prefs["codegen_backend"] == "openai_api"
+
+
+def test_quickstart_pasted_assignment_extracts_key(monkeypatch, tmp_path: Path):
+    import ocean.cli as cli_mod
+    from rich.prompt import Prompt
+
+    _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli_mod, "_is_test_env", lambda: False)
+    monkeypatch.delenv("OCEAN_CODEGEN_BACKEND", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Prompt, "ask", lambda *args, **kwargs: "2")
+    monkeypatch.setattr(cli_mod.getpass, "getpass", lambda _p="": "export GEMINI_API_KEY='AIza-test-secret-value'")
+
+    backend = cli_mod._quickstart_login_if_possible(tmp_path)
+
+    assert backend == "gemini_api"
+    env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "GEMINI_API_KEY=AIza-test-secret-value" in env_text
+    assert "export GEMINI_API_KEY" not in env_text
+
+
+def test_quickstart_subscription_login_is_default(monkeypatch, tmp_path: Path):
+    import ocean.cli as cli_mod
+    from rich.prompt import Prompt
+
+    _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli_mod, "_is_test_env", lambda: False)
+    monkeypatch.delenv("OCEAN_CODEGEN_BACKEND", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Prompt, "ask", lambda *args, **kwargs: "1")
+    calls: list[str] = []
+    monkeypatch.setattr(cli_mod, "_ensure_codex_auth", lambda: calls.append("auth"))
+
+    backend = cli_mod._quickstart_login_if_possible(tmp_path)
+
+    assert backend == "codex"
+    assert calls == ["auth"]
+    prefs = json.loads((tmp_path / "docs" / "ocean_prefs.json").read_text(encoding="utf-8"))
+    assert prefs["codegen_backend"] == "codex"
+
+
+def test_quickstart_cursor_handoff_pref_still_offers_login(monkeypatch, tmp_path: Path):
+    import ocean.cli as cli_mod
+    from rich.prompt import Prompt
+
+    _patch_cli_paths(monkeypatch, tmp_path)
+    prefs_path = tmp_path / "docs" / "ocean_prefs.json"
+    prefs_path.parent.mkdir(parents=True, exist_ok=True)
+    prefs_path.write_text(json.dumps({"codegen_backend": "cursor_handoff"}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "_is_test_env", lambda: False)
+    monkeypatch.delenv("OCEAN_CODEGEN_BACKEND", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli_mod.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(cli_mod.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(Prompt, "ask", lambda *args, **kwargs: "1")
+    calls: list[str] = []
+    monkeypatch.setattr(cli_mod, "_ensure_codex_auth", lambda: calls.append("auth"))
+
+    backend = cli_mod._quickstart_login_if_possible(tmp_path)
+
+    assert backend == "codex"
+    assert calls == ["auth"]
+    prefs = json.loads(prefs_path.read_text(encoding="utf-8"))
+    assert prefs["codegen_backend"] == "codex"

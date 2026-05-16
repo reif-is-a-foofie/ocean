@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 
 @dataclass(frozen=True)
 class AdvisorResult:
@@ -84,6 +86,20 @@ def ask_chat_advisor(prompt: str, *, cwd: Path, timeout: int = 90) -> AdvisorRes
         return run_text_advisor(custom_cmd, prompt, cwd=cwd, timeout=timeout)
     if (os.getenv("OCEAN_CHAT_ADVISOR") or os.getenv("OCEAN_PM_ADVISOR") or "").lower() == "codex":
         return _run_codex_advisor(prompt, cwd=cwd, timeout=timeout)
+    if os.getenv("OCEAN_CHAT_ADVISOR_AUTO", "1") in ("0", "false", "False"):
+        return None
+    try:
+        from .backends import get_codegen_backend
+
+        backend = get_codegen_backend(cwd)
+        if backend == "openai_api":
+            return _run_openai_chat_advisor(prompt, cwd=cwd, timeout=timeout)
+        if backend == "gemini_api":
+            return _run_gemini_chat_advisor(prompt, cwd=cwd, timeout=timeout)
+        if backend == "codex":
+            return _run_codex_advisor(prompt, cwd=cwd, timeout=timeout)
+    except Exception:
+        return None
     return None
 
 
@@ -118,11 +134,11 @@ def _run_codex_advisor(prompt: str, *, cwd: Path, timeout: int) -> AdvisorResult
         codex,
         "--cd",
         str(cwd),
+        "--ask-for-approval",
+        "never",
         "exec",
         "--sandbox",
         "read-only",
-        "--ask-for-approval",
-        "never",
         prompt,
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(cwd), timeout=timeout, check=False)
@@ -130,6 +146,80 @@ def _run_codex_advisor(prompt: str, *, cwd: Path, timeout: int) -> AdvisorResult
     if not text:
         text = f"codex advisor exited {proc.returncode} without output"
     return AdvisorResult(source="codex", text=text, data=_extract_json(text))
+
+
+def _run_openai_chat_advisor(prompt: str, *, cwd: Path, timeout: int) -> AdvisorResult | None:
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not key:
+        return None
+    from .backends import get_openai_model
+
+    model = get_openai_model(cwd).strip()
+    if model.startswith("o4"):
+        model = "gpt-4o-mini"
+    body: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are Ocean's conversational product/build agent. Be concise and decide useful next actions from natural language.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+    }
+    resp = httpx.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json=body,
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    text = str((((data.get("choices") or [{}])[0]).get("message") or {}).get("content") or "").strip()
+    return AdvisorResult(source="openai_api", text=text or "OpenAI returned an empty response.", data=_extract_json(text))
+
+
+def _run_gemini_chat_advisor(prompt: str, *, cwd: Path, timeout: int) -> AdvisorResult | None:
+    key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    if not key:
+        return None
+    from .backends import get_gemini_model
+
+    model = get_gemini_model(cwd).strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    body: dict[str, Any] = {
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": "You are Ocean's conversational product/build agent. Be concise and decide useful next actions from natural language.",
+                }
+            ]
+        },
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3},
+    }
+    resp = httpx.post(
+        url,
+        headers={"Content-Type": "application/json", "x-goog-api-key": key},
+        json=body,
+        timeout=timeout,
+    )
+    data = resp.json()
+    if resp.status_code >= 400:
+        err = data.get("error") if isinstance(data.get("error"), dict) else {}
+        msg = (err.get("message") if isinstance(err, dict) else None) or json.dumps(data)[:300]
+        raise RuntimeError(f"Gemini API HTTP {resp.status_code}: {msg}")
+    cands = data.get("candidates") or []
+    text = ""
+    if cands and isinstance(cands[0], dict):
+        parts = ((cands[0].get("content") or {}).get("parts")) or []
+        if isinstance(parts, list):
+            for part in parts:
+                if isinstance(part, dict) and part.get("text"):
+                    text += str(part["text"])
+    text = text.strip()
+    return AdvisorResult(source="gemini_api", text=text or "Gemini returned an empty response.", data=_extract_json(text))
 
 
 def _extract_json(text: str) -> dict[str, Any] | None:

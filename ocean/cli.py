@@ -3,6 +3,7 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -36,6 +37,9 @@ from .backends import (
     prompt_codegen_model_if_needed,
     apply_backend_env_from_prefs,
     probe_snapshot,
+    load_prefs,
+    save_prefs,
+    set_codegen_backend_env,
 )
 from .dotenv_merge import merge_dotenv_assignments
 from .events_emit import emit_setup
@@ -543,6 +547,173 @@ def _interactive_secret_stdin() -> bool:
         return sys.stdin.isatty() and sys.stdout.isatty()
     except Exception:
         return False
+
+
+def _backend_choice_is_fixed(root: Path) -> bool:
+    env_backend = (os.getenv("OCEAN_CODEGEN_BACKEND") or "").strip().lower()
+    if env_backend in VALID_BACKENDS:
+        return True
+    disk_backend = (load_prefs(root).get("codegen_backend") or "").strip().lower()
+    if disk_backend in {"cursor_handoff", "dry_plan_only"}:
+        return False
+    return disk_backend in VALID_BACKENDS
+
+
+def _detected_login_options() -> list[tuple[str, str, str]]:
+    """Return non-secret API-key login options detected in the current process env."""
+    options: list[tuple[str, str, str]] = []
+    if (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip():
+        options.append(("gemini_api", "Use existing Gemini API key", "existing_gemini_key"))
+    if (os.getenv("OPENAI_API_KEY") or "").strip():
+        options.append(("openai_api", "Use existing OpenAI API key", "existing_openai_key"))
+    return options
+
+
+def _codex_subscription_login_exists() -> bool:
+    try:
+        auth = Path.home() / ".codex" / "auth.json"
+        if auth.exists():
+            data = json.loads(auth.read_text(encoding="utf-8"))
+            if (data.get("id_token") or "").strip():
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _infer_api_key_backend(raw: str) -> str:
+    key = _extract_api_key_candidate(raw)
+    if key.startswith("AIza"):
+        return "gemini_api"
+    if key.startswith("sk-"):
+        return "openai_api"
+    return ""
+
+
+def _extract_api_key_candidate(raw: str) -> str:
+    """Accept raw keys or pasted shell assignments without logging secrets."""
+    text = raw.strip().strip("'\"")
+    if "=" in text:
+        key, value = text.split("=", 1)
+        if key.strip().removeprefix("export ").strip() in {
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "OPENAI_API_KEY",
+        }:
+            text = value.strip().strip("'\"")
+    match = re.search(r"(AIza[0-9A-Za-z_\-]{16,}|sk-[0-9A-Za-z_\-]{16,})", text)
+    return match.group(1) if match else text
+
+
+def _save_api_key_for_backend(root: Path, backend: str, raw: str) -> None:
+    key = _extract_api_key_candidate(raw)
+    if backend == "gemini_api":
+        merge_dotenv_assignments(root / ".env", {"GEMINI_API_KEY": key})
+        os.environ["GEMINI_API_KEY"] = key
+    elif backend == "openai_api":
+        merge_dotenv_assignments(root / ".env", {"OPENAI_API_KEY": key})
+        os.environ["OPENAI_API_KEY"] = key
+
+
+def _quickstart_login_if_possible(root: Path) -> str:
+    """Offer the shortest live-chat auth path before the full backend menu."""
+    if _backend_choice_is_fixed(root):
+        return ""
+    if _is_test_env():
+        return ""
+    if os.getenv("OCEAN_SKIP_BACKEND_PROMPT") in ("1", "true", "True"):
+        return ""
+    if os.getenv("OCEAN_ALLOW_QUESTIONS", "1") in ("0", "false", "False"):
+        return ""
+
+    detected = _detected_login_options()
+    emit_setup("question", id="login_choice", message="Choose login for live chat/build", secure=False)
+    if not _interactive_secret_stdin():
+        emit_setup("info", id="login_choice", skipped="non_tty")
+        return ""
+
+    choices: dict[str, tuple[str, str]] = {
+        "1": ("codex", "codex_subscription"),
+        "2": ("paste_key", "paste_key"),
+    }
+    codex_label = "Codex subscription login"
+    if _codex_subscription_login_exists():
+        codex_label += " (recommended; existing login found)"
+    else:
+        codex_label += " (recommended)"
+    lines = [
+        "🌊 Ocean: How should I log you in?",
+        f"  [1] {codex_label}",
+        "  [2] Paste an API key backup (Gemini or OpenAI; hidden, saved to .env)",
+    ]
+    next_choice = 3
+    for backend, label, source in detected:
+        choices[str(next_choice)] = (backend, source)
+        lines.append(f"  [{next_choice}] {label}")
+        next_choice += 1
+    choices[str(next_choice)] = ("backend_menu", "backend_menu")
+    lines.append(f"  [{next_choice}] More options (Claude, Cursor handoff, dry plan)")
+    for line in lines:
+        feed(line)
+    try:
+        choice = Prompt.ask(
+            "Choose login",
+            choices=list(choices.keys()),
+            default="1",
+        )
+    except Exception:
+        return ""
+    picked, source = choices.get(choice.strip(), ("codex", "codex_subscription"))
+
+    if picked == "backend_menu":
+        emit_setup("info", id="login_choice", selected="backend_menu")
+        return ""
+
+    if picked == "paste_key":
+        emit_setup(
+            "question",
+            id="api_key",
+            message="Paste a Gemini or OpenAI API key. The value is hidden and not logged.",
+            secure=True,
+        )
+        try:
+            raw = getpass.getpass("API key (hidden): ").strip()
+        except Exception:
+            raw = ""
+        if not raw:
+            emit_setup("info", id="api_key", saved=False, empty=True)
+            return ""
+        backend = _infer_api_key_backend(raw)
+        key = _extract_api_key_candidate(raw)
+        if not backend:
+            try:
+                provider = Prompt.ask(
+                    "Which provider is this key for?",
+                    choices=["gemini", "openai"],
+                    default="gemini",
+                )
+            except Exception:
+                provider = "gemini"
+            backend = "openai_api" if provider.strip().lower() == "openai" else "gemini_api"
+        _save_api_key_for_backend(root, backend, raw)
+        save_prefs({"codegen_backend": backend}, root)
+        set_codegen_backend_env(backend)
+        masked = (key[:6] + "…") if len(key) > 6 else "(set)"
+        emit_setup("phase_end", id="api_key", saved=True, prefix_masked=masked, codegen_backend=backend)
+        emit_setup("answer", id="codegen_backend", codegen_backend=backend, source="pasted_api_key")
+        feed(f"🌊 Ocean: API key saved to .env (len={len(key)}, prefix={masked}). Live chat is ready.")
+        return backend
+
+    save_prefs({"codegen_backend": picked}, root)
+    set_codegen_backend_env(picked)
+    emit_setup("answer", id="codegen_backend", codegen_backend=picked, source=source)
+    if picked == "codex":
+        feed("🌊 Ocean: Subscription path selected. I will check Codex login and open auth if needed.")
+        if not _external_startup_disabled():
+            _ensure_codex_auth()
+    else:
+        feed(f"🌊 Ocean: Existing {picked.replace('_', ' ')} credential selected.")
+    return picked
 
 
 def _prompt_openai_api_key_if_needed() -> None:
@@ -1190,6 +1361,7 @@ def chat(
     prd: Optional[str] = typer.Option(None, "--prd", help="Path to PRD file or '-' to read from stdin"),
     stage: bool = typer.Option(True, "--stage/--no-stage", help="Auto-deploy to local staging after build"),
     prod: bool = typer.Option(False, "--prod", help="Prepare for production and pause before go-live"),
+    quick: bool = typer.Option(False, "--quick/--full", help="Start a lightweight conversation first; default is the full crew/planning flow"),
 ):
     """Main interactive conversation flow"""
     ensure_repo_structure()
@@ -1217,7 +1389,8 @@ def chat(
     except Exception:
         pass
 
-    _prompt_project_directory_if_needed(log)
+    if not quick:
+        _prompt_project_directory_if_needed(log)
 
     try:
         from . import setup_flow as _setup_flow
@@ -1242,15 +1415,18 @@ def chat(
 
     emit_setup("phase_start", id="welcome")
     if os.getenv("OCEAN_SIMPLE_FEED") == "1":
-        _auto_self_update_and_version()
-        feed("🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship.")
-        feed(f"🌊 Ocean: Workspace: {Path.cwd()}")
-        feed(
-            "🌊 Ocean: **You drive goals.** I run the crew, timing, and token budget—you never orchestrate specialists yourself."
-        )
-        feed(
-            "🌊 Ocean: Each crewmate has voicing + skills in docs/personas.yaml — emoji lines in chat show who’s speaking."
-        )
+        if quick:
+            feed(f"🌊 Ocean: Chat setup — workspace {Path.cwd()}")
+        else:
+            _auto_self_update_and_version()
+            feed("🌊 Ocean: Ahoy! I'm Ocean — caffeinated and ready to ship.")
+            feed(f"🌊 Ocean: Workspace: {Path.cwd()}")
+            feed(
+                "🌊 Ocean: **You drive goals.** I run the crew, timing, and token budget—you never orchestrate specialists yourself."
+            )
+            feed(
+                "🌊 Ocean: Each crewmate has voicing + skills in docs/personas.yaml — emoji lines in chat show who’s speaking."
+            )
     else:
         console.print(banner())
         console.print(
@@ -1261,18 +1437,22 @@ def chat(
 
     emit_setup("phase_start", id="backend_choice")
     emit_setup("info", id="codegen_backend_probes", probe=probe_snapshot(Path.cwd()))
-    emit_setup(
-        "question",
-        id="codegen_backend",
-        message="Pick coding brain (LLM / IDE path)",
-        choices=sorted(VALID_BACKENDS),
-    )
-    try:
-        _bk_choice = prompt_codegen_backend_if_needed(Path.cwd())
+    _bk_choice = _quickstart_login_if_possible(Path.cwd())
+    if not _bk_choice:
+        emit_setup(
+            "question",
+            id="codegen_backend",
+            message="Pick coding brain (LLM / IDE path)",
+            choices=sorted(VALID_BACKENDS),
+        )
+        try:
+            _bk_choice = prompt_codegen_backend_if_needed(Path.cwd())
+            feed(f"🌊 Ocean: Codegen backend → {_bk_choice}")
+            emit_setup("answer", id="codegen_backend", codegen_backend=_bk_choice)
+        except Exception:
+            _bk_choice = get_codegen_backend()
+    else:
         feed(f"🌊 Ocean: Codegen backend → {_bk_choice}")
-        emit_setup("answer", id="codegen_backend", codegen_backend=_bk_choice)
-    except Exception:
-        _bk_choice = get_codegen_backend()
     emit_setup("phase_end", id="backend_choice")
 
     token_budget.feed_status_if_needed(feed)
@@ -1294,6 +1474,17 @@ def chat(
     except Exception:
         pass
     emit_setup("phase_end", id="model_choice")
+
+    if quick and prd is None and not prod and (
+        not _is_test_env() or os.getenv("OCEAN_TEST_QUICK_CHAT") == "1"
+    ):
+        emit_setup("phase_start", id="conversation")
+        feed("🌊 Ocean: Chat is ready.")
+        emit_setup("phase_end", id="conversation")
+        chat_repl()
+        feed("🌊 Ocean: Session complete.")
+        feed(f"📝 Session log: {log}")
+        return
 
     if not _is_test_env():
         try:
@@ -2225,7 +2416,7 @@ def chat_repl():
     """
     ensure_repo_structure()
     os.environ.setdefault("OCEAN_SIMPLE_FEED", "1")
-    console.print("[bold blue]🌊 OCEAN:[/bold blue] Chat REPL — type 'help' for options.")
+    console.print("[bold blue]🌊 OCEAN:[/bold blue] Chat with Ocean.")
     while True:
         try:
             if os.getenv("OCEAN_SIMPLE_FEED") == "1":
@@ -2299,7 +2490,13 @@ def chat_repl():
                 "compose": bool(__import__('shutil').which("docker")),
             })
             continue
-        console.print("[yellow]Unknown command. Type 'help'.[/yellow]")
+        try:
+            from .product_chat import product_chat
+
+            result = product_chat(ROOT, line, use_advisor=True)
+            console.print(result.get("response") or "I heard you, but the chat agent returned no response.")
+        except Exception as e:
+            console.print(f"Chat agent unavailable: {e}")
 
 
 
@@ -2859,6 +3056,8 @@ def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str, Optional[str]]:
             cmd += ["--profile", profile]
         if want_cd:
             cmd += ["--cd", str(Path.cwd())]
+        if approval in ("untrusted", "on-failure", "on-request", "never"):
+            cmd += ["--ask-for-approval", approval]
         if skip_git:
             cmd.append("--skip-git-repo-check")
         cmd.append("exec")
@@ -2867,8 +3066,6 @@ def _codex_e2e_test(timeout: int = 8) -> tuple[bool, str, Optional[str]]:
         else:
             sb = sandbox if sandbox in ("read-only", "workspace-write", "danger-full-access") else "workspace-write"
             cmd += ["--sandbox", sb]
-            if approval in ("untrusted", "on-failure", "on-request", "never"):
-                cmd += ["--ask-for-approval", approval]
         # Prefer faster success detection with --output-last-message
         last_path = LOGS / "codex-test-last.txt"
         cmd += ["--output-last-message", str(last_path)]

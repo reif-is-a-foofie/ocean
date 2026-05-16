@@ -92,6 +92,61 @@ def test_chat_non_interactive(monkeypatch, tmp_path):
     assert "Crew assembled" in r.output
 
 
+def test_chat_quick_enters_repl_without_crew_dump(monkeypatch, tmp_path):
+    from ocean import cli as cli_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli_mod, "ROOT", tmp_path)
+    monkeypatch.setattr(cli_mod, "DOCS", tmp_path / "docs")
+    monkeypatch.setattr(cli_mod, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(cli_mod, "BACKEND", tmp_path / "backend")
+    monkeypatch.setattr(cli_mod, "UI", tmp_path / "ui")
+    monkeypatch.setattr(cli_mod, "DEVOPS", tmp_path / "devops")
+    monkeypatch.setattr(cli_mod, "PROJECTS", tmp_path / "projects")
+    monkeypatch.setenv("OCEAN_DISABLE_CODEX", "1")
+    monkeypatch.setenv("OCEAN_SIMPLE_FEED", "1")
+    monkeypatch.setenv("OCEAN_SKIP_REPO_PROMPT", "1")
+    monkeypatch.setenv("OCEAN_TEST_QUICK_CHAT", "1")
+
+    r = runner.invoke(app, ["chat", "--quick"], input="exit\n")
+
+    assert r.exit_code == 0
+    assert "Chat is ready" in r.output
+    assert "ocean>" in r.output
+    assert "Crew assembled" not in r.output
+
+
+def test_chat_repl_treats_free_text_as_chat(monkeypatch, tmp_path):
+    from ocean import cli as cli_mod
+    from ocean import product_chat as product_chat_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli_mod, "ROOT", tmp_path)
+    monkeypatch.setattr(cli_mod, "DOCS", tmp_path / "docs")
+    monkeypatch.setattr(cli_mod, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(cli_mod, "BACKEND", tmp_path / "backend")
+    monkeypatch.setattr(cli_mod, "UI", tmp_path / "ui")
+    monkeypatch.setattr(cli_mod, "DEVOPS", tmp_path / "devops")
+    monkeypatch.setattr(cli_mod, "PROJECTS", tmp_path / "projects")
+    monkeypatch.setenv("OCEAN_SIMPLE_FEED", "1")
+
+    calls: list[tuple[object, str, bool]] = []
+
+    def fake_product_chat(root, message, *, use_advisor=True):
+        calls.append((root, message, use_advisor))
+        return {"response": "agent reply: I can make the command from that."}
+
+    monkeypatch.setattr(product_chat_mod, "product_chat", fake_product_chat)
+
+    r = runner.invoke(app, ["chat-repl"], input="hey there\nexit\n")
+
+    assert r.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0][1:] == ("hey there", True)
+    assert "agent reply: I can make the command from that." in r.output
+    assert "Unknown command" not in r.output
+
+
 def test_clarify_command():
     r = runner.invoke(app, ["--help"])
     assert r.exit_code == 0

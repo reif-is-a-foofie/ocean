@@ -514,6 +514,8 @@ def generate_files(
         cmd += ["--profile", profile]
     if want_cd:
         cmd += ["--cd", str(Path.cwd())]
+    if approval in ("untrusted", "on-failure", "on-request", "never"):
+        cmd += ["--ask-for-approval", approval]
     if skip_git:
         cmd.append("--skip-git-repo-check")
     cmd.append("exec")
@@ -523,8 +525,6 @@ def generate_files(
         # Default sandbox to workspace-write if not specified
         sb = sandbox if sandbox in ("read-only", "workspace-write", "danger-full-access") else "workspace-write"
         cmd += ["--sandbox", sb]
-        if approval in ("untrusted", "on-failure", "on-request", "never"):
-            cmd += ["--ask-for-approval", approval]
     if use_json or stream:
         cmd.append("--json")
 

@@ -136,6 +136,8 @@ def exec_json(
         cmd += ["--profile", profile]
     if want_cd:
         cmd += ["--cd", str(Path.cwd())]
+    if approval in ("untrusted", "on-failure", "on-request", "never"):
+        cmd += ["--ask-for-approval", approval]
     if skip_git:
         cmd.append("--skip-git-repo-check")
     cmd.append("exec")
@@ -144,8 +146,6 @@ def exec_json(
     else:
         sb = sandbox if sandbox in ("read-only", "workspace-write", "danger-full-access") else "workspace-write"
         cmd += ["--sandbox", sb]
-        if approval in ("untrusted", "on-failure", "on-request", "never"):
-            cmd += ["--ask-for-approval", approval]
     # Supply prompt positionally
     cmd.append(prompt)
 
